@@ -6,6 +6,7 @@ const themeToggleBtn = document.getElementById('theme-toggle-btn');
 const requestMethodSelect = document.getElementById('request-method');
 const urlInput = document.getElementById('url-input');
 const sendBtn = document.getElementById('send-btn');
+const saveEndpointBtn = document.getElementById('save-endpoint-btn');
 
 // Authentication Elements
 const authTypeSelect = document.getElementById('auth-type');
@@ -17,6 +18,14 @@ const mobileMenuBtn = document.querySelector('.mobile-menu-btn');
 const sidebar = document.querySelector('.sidebar');
 const sidebarOverlay = document.querySelector('.sidebar-overlay');
 const sidebarThemeToggleBtn = document.getElementById('sidebar-theme-toggle-btn');
+
+// Saved Endpoints Elements
+const savedEndpointsSidebar = document.querySelector('.saved-endpoints-sidebar');
+const showSavedSidebarBtn = document.getElementById('show-saved-sidebar-btn');
+const headerSavedSidebarBtn = document.getElementById('header-saved-sidebar-btn');
+const savedEndpointsList = document.getElementById('saved-endpoints-list');
+const noSavedEndpointsMsg = document.querySelector('.no-saved-endpoints');
+const mainContainer = document.querySelector('main');
 
 // Get current theme from localStorage
 const currentTheme = localStorage.getItem('postboyTheme') || 'dark-mode';
@@ -197,6 +206,7 @@ let jsonEditor = null;
 // Interactive elements that should be disabled during requests
 const interactiveElements = [
     sendBtn,
+    saveEndpointBtn,
     requestMethodSelect,
     urlInput,
     bodyTypeSelect,
@@ -639,18 +649,24 @@ async function sendRequest() {
         const responseHeaders = formatHeaders(response.headers);
         applySyntaxHighlighting(responseHeadersElem, 'http', responseHeaders);
         
+        // Variables to store response info
+        let responseBody = '';
+        let responseType = 'text';
+        
         // Handle response body (special case for HEAD method which has no body)
         if (methodConfig.bodylessResponse) {
             responseBodyElem.textContent = "No response body for HEAD requests";
+            responseBody = "No response body for HEAD requests";
         } else {
             // Get response body
             try {
                 const contentType = response.headers.get('content-type');
-                let responseBody;
                 
                 if (contentType && contentType.includes('application/json')) {
-                    responseBody = await response.json();
-                    const formattedJson = formatJSON(JSON.stringify(responseBody));
+                    const jsonResponse = await response.json();
+                    responseBody = JSON.stringify(jsonResponse);
+                    responseType = 'json';
+                    const formattedJson = formatJSON(responseBody);
                     applySyntaxHighlighting(responseBodyElem, 'json', formattedJson);
                 } else if (contentType && (
                     contentType.includes('text/html') || 
@@ -658,32 +674,41 @@ async function sendRequest() {
                     contentType.includes('text/xml')
                 )) {
                     responseBody = await response.text();
-                    let language = 'html';
-                    if (contentType.includes('xml')) {
-                        language = 'xml';
+                    if (contentType.includes('html')) {
+                        responseType = 'html';
+                    } else {
+                        responseType = 'xml';
                     }
-                    applySyntaxHighlighting(responseBodyElem, language, responseBody);
+                    applySyntaxHighlighting(responseBodyElem, responseType, responseBody);
                 } else if (contentType && contentType.includes('text/css')) {
                     responseBody = await response.text();
+                    responseType = 'css';
                     applySyntaxHighlighting(responseBodyElem, 'css', responseBody);
                 } else if (contentType && contentType.includes('application/javascript')) {
                     responseBody = await response.text();
+                    responseType = 'javascript';
                     applySyntaxHighlighting(responseBodyElem, 'javascript', responseBody);
                 } else {
                     responseBody = await response.text();
                     // Try to detect if it's JSON
                     try {
                         JSON.parse(responseBody);
+                        responseType = 'json';
                         applySyntaxHighlighting(responseBodyElem, 'json', formatJSON(responseBody));
                     } catch (e) {
                         // Not JSON, use plaintext
+                        responseType = 'plaintext';
                         applySyntaxHighlighting(responseBodyElem, 'plaintext', responseBody);
                     }
                 }
             } catch (error) {
-                responseBodyElem.textContent = 'Error parsing response body: ' + error.message;
+                responseBody = 'Error parsing response body: ' + error.message;
+                responseType = 'error';
+                responseBodyElem.textContent = responseBody;
             }
         }
+        
+        // No more auto-save functionality
         
     } catch (error) {
         console.error('Request error:', error);
@@ -772,6 +797,10 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initialize auth type UI
     authTypeSelect.dispatchEvent(new Event('change'));
     
+    // Initialize saved endpoints sidebar
+    initializeSidebarState();
+    renderSavedEndpoints();
+    
     // Add syntax highlighting to JSON input when focus is lost
     jsonBodyTextarea.addEventListener('blur', function() {
         try {
@@ -798,4 +827,312 @@ document.addEventListener('DOMContentLoaded', () => {
             copyResponseBtn.classList.remove('copied');
         });
     });
+    
+    // Handle window resize for responsive sidebar
+    window.addEventListener('resize', () => {
+        if (window.innerWidth <= 768) {
+            savedEndpointsSidebar.classList.add('collapsed');
+            mainContainer.classList.remove('with-saved-sidebar');
+            showSavedSidebarBtn.style.display = 'flex';
+        } else if (!savedEndpointsSidebar.classList.contains('collapsed')) {
+            mainContainer.classList.add('with-saved-sidebar');
+            showSavedSidebarBtn.style.display = 'none';
+        } else {
+        }
+    });
 });
+
+// Show Saved Endpoints Sidebar Button
+showSavedSidebarBtn.addEventListener('click', () => {
+    savedEndpointsSidebar.classList.remove('collapsed');
+    mainContainer.classList.add('with-saved-sidebar');
+});
+
+// Header Saved Endpoints Button
+headerSavedSidebarBtn.addEventListener('click', () => {
+    savedEndpointsSidebar.classList.toggle('collapsed');
+    mainContainer.classList.toggle('with-saved-sidebar');
+});
+
+// Initialize sidebar state (open by default on larger screens, collapsed on mobile)
+function initializeSidebarState() {
+    if (window.innerWidth <= 768) {
+        savedEndpointsSidebar.classList.add('collapsed');
+        mainContainer.classList.remove('with-saved-sidebar');
+        showSavedSidebarBtn.style.display = 'flex';
+    } else {
+        mainContainer.classList.add('with-saved-sidebar');
+        showSavedSidebarBtn.style.display = 'none';
+    }
+}
+
+// Saved Endpoints Logic
+let savedEndpoints = JSON.parse(localStorage.getItem('postboySavedEndpoints')) || [];
+
+// Filter out any existing auto-saved entries
+savedEndpoints = savedEndpoints.filter(endpoint => !endpoint.autoSaved);
+localStorage.setItem('postboySavedEndpoints', JSON.stringify(savedEndpoints));
+
+// Save the current endpoint configuration
+function saveEndpoint() {
+    const endpointUrl = urlInput.value.trim();
+    
+    if (!endpointUrl) {
+        alert('Please enter a URL before saving');
+        return;
+    }
+    
+    // Get a name for the endpoint
+    const endpointName = prompt('Enter a name for this endpoint', endpointUrl);
+    
+    if (!endpointName) return; // User cancelled
+    
+    // Check if an endpoint with this name already exists
+    const existingIndex = savedEndpoints.findIndex(ep => ep.name === endpointName);
+    
+    if (existingIndex !== -1) {
+        const overwrite = confirm(`An endpoint named "${endpointName}" already exists. Do you want to overwrite it?`);
+        if (!overwrite) return;
+    }
+    
+    // Get response data if available
+    let responseData = null;
+    if (statusCodeElem.textContent) {
+        responseData = {
+            status: parseInt(statusCodeElem.textContent) || 0,
+            time: parseInt(responseTimeElem.textContent) || 0,
+            headers: responseHeadersElem.textContent,
+            body: responseBodyElem.textContent,
+            type: responseBodyElem.className
+        };
+    }
+    
+    // Create an endpoint object with all current configuration
+    const endpoint = {
+        name: endpointName,
+        method: requestMethodSelect.value,
+        url: endpointUrl,
+        params: getKeyValuePairs(paramsContainer),
+        headers: getKeyValuePairs(headersContainer),
+        auth: {
+            type: authTypeSelect.value,
+            token: bearerTokenInput.value.trim()
+        },
+        body: {
+            type: bodyTypeSelect.value,
+            rawJson: jsonBodyTextarea.value.trim(),
+            formData: bodyTypeSelect.value.includes('form') ? getKeyValuePairs(bodyFormContainer) : {}
+        },
+        response: responseData,
+        timestamp: Date.now()
+    };
+    
+    // Add or update in saved endpoints array
+    if (existingIndex !== -1) {
+        savedEndpoints[existingIndex] = endpoint;
+    } else {
+        savedEndpoints.push(endpoint);
+    }
+    
+    // Save to localStorage
+    localStorage.setItem('postboySavedEndpoints', JSON.stringify(savedEndpoints));
+    
+    // Update the UI
+    renderSavedEndpoints();
+}
+
+// Load a saved endpoint configuration
+function loadEndpoint(endpoint) {
+    // Set method
+    requestMethodSelect.value = endpoint.method;
+    requestMethodSelect.dispatchEvent(new Event('change'));
+    
+    // Set URL
+    urlInput.value = endpoint.url;
+    
+    // Set params
+    clearContainer(paramsContainer);
+    if (Object.keys(endpoint.params || {}).length > 0) {
+        for (const [key, value] of Object.entries(endpoint.params)) {
+            const pairDiv = addKeyValuePair(paramsContainer);
+            pairDiv.querySelector('.key-input').value = key;
+            pairDiv.querySelector('.value-input').value = value;
+        }
+    } else {
+        addKeyValuePair(paramsContainer);
+    }
+    
+    // Set headers
+    clearContainer(headersContainer);
+    if (Object.keys(endpoint.headers || {}).length > 0) {
+        for (const [key, value] of Object.entries(endpoint.headers)) {
+            const pairDiv = addKeyValuePair(headersContainer);
+            pairDiv.querySelector('.key-input').value = key;
+            pairDiv.querySelector('.value-input').value = value;
+        }
+    } else {
+        addKeyValuePair(headersContainer);
+    }
+    
+    // Set auth
+    if (endpoint.auth) {
+        authTypeSelect.value = endpoint.auth.type || 'none';
+        authTypeSelect.dispatchEvent(new Event('change'));
+        
+        if (endpoint.auth.type === 'bearer') {
+            bearerTokenInput.value = endpoint.auth.token || '';
+        }
+    }
+    
+    // Set body
+    if (endpoint.body) {
+        bodyTypeSelect.value = endpoint.body.type || 'none';
+        bodyTypeSelect.dispatchEvent(new Event('change'));
+        
+        if (endpoint.body.type === 'raw') {
+            jsonBodyTextarea.value = endpoint.body.rawJson || '';
+        } else if (endpoint.body.type.includes('form')) {
+            clearContainer(bodyFormContainer);
+            if (Object.keys(endpoint.body.formData || {}).length > 0) {
+                for (const [key, value] of Object.entries(endpoint.body.formData)) {
+                    const pairDiv = addKeyValuePair(bodyFormContainer);
+                    pairDiv.querySelector('.key-input').value = key;
+                    pairDiv.querySelector('.value-input').value = value;
+                }
+            } else {
+                addKeyValuePair(bodyFormContainer);
+            }
+        }
+    }
+    
+    // Load response if available
+    if (endpoint.response) {
+        // Set status code
+        statusCodeElem.textContent = endpoint.response.status;
+        statusCodeElem.className = '';
+        if (endpoint.response.status >= 200 && endpoint.response.status < 400) {
+            statusCodeElem.classList.add('success');
+        } else {
+            statusCodeElem.classList.add('error');
+        }
+        
+        // Set response time
+        responseTimeElem.textContent = `${endpoint.response.time} ms`;
+        
+        // Set response headers
+        applySyntaxHighlighting(responseHeadersElem, 'http', endpoint.response.headers);
+        
+        // Set response body based on type
+        if (endpoint.response.type === 'json') {
+            applySyntaxHighlighting(responseBodyElem, 'json', formatJSON(endpoint.response.body));
+        } else {
+            applySyntaxHighlighting(responseBodyElem, endpoint.response.type, endpoint.response.body);
+        }
+    } else {
+        // Clear response if not available
+        statusCodeElem.textContent = '';
+        statusCodeElem.className = '';
+        responseTimeElem.textContent = '';
+        responseBodyElem.textContent = DEFAULT_BODY_MESSAGE;
+        responseHeadersElem.textContent = DEFAULT_HEADERS_MESSAGE;
+    }
+    
+    // Switch to params tab
+    document.querySelector('.tab-btn[data-tab="params"]').click();
+}
+
+// Delete a saved endpoint
+function deleteEndpoint(index) {
+    const endpoint = savedEndpoints[index];
+    
+    if (confirm(`Are you sure you want to delete "${endpoint.name}"?`)) {
+        savedEndpoints.splice(index, 1);
+        localStorage.setItem('postboySavedEndpoints', JSON.stringify(savedEndpoints));
+        renderSavedEndpoints();
+    }
+}
+
+// Helper function to clear a container's key-value pairs
+function clearContainer(container) {
+    const pairs = container.querySelectorAll('.key-value-pair');
+    pairs.forEach(pair => pair.remove());
+}
+
+// Render saved endpoints in the sidebar
+function renderSavedEndpoints() {
+    savedEndpointsList.innerHTML = '';
+    
+    if (savedEndpoints.length === 0) {
+        noSavedEndpointsMsg.style.display = 'block';
+        return;
+    }
+    
+    noSavedEndpointsMsg.style.display = 'none';
+    
+    // Sort by most recently saved/used
+    const sortedEndpoints = [...savedEndpoints].sort((a, b) => b.timestamp - a.timestamp);
+    
+    sortedEndpoints.forEach((endpoint, index) => {
+        const listItem = document.createElement('li');
+        listItem.className = 'saved-endpoint-item';
+        
+        const methodSpan = document.createElement('span');
+        methodSpan.className = `saved-endpoint-method ${endpoint.method.toLowerCase()}`;
+        methodSpan.textContent = endpoint.method;
+        
+        const urlSpan = document.createElement('span');
+        urlSpan.className = 'saved-endpoint-url';
+        urlSpan.textContent = endpoint.url;
+        
+        const nameDiv = document.createElement('div');
+        nameDiv.className = 'saved-endpoint-name';
+        nameDiv.textContent = endpoint.name || endpoint.url;
+        
+        // Response status badge if available
+        if (endpoint.response && endpoint.response.status) {
+            const statusBadge = document.createElement('span');
+            statusBadge.className = 'saved-endpoint-status';
+            statusBadge.textContent = endpoint.response.status;
+            
+            if (endpoint.response.status >= 200 && endpoint.response.status < 400) {
+                statusBadge.classList.add('success');
+            } else {
+                statusBadge.classList.add('error');
+            }
+            
+            listItem.appendChild(statusBadge);
+        }
+        
+        const actionsDiv = document.createElement('div');
+        actionsDiv.className = 'saved-endpoint-actions';
+        
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'save-endpoint-action-btn delete-btn';
+        deleteBtn.innerHTML = '<i class="fas fa-trash"></i>';
+        deleteBtn.title = 'Delete Endpoint';
+        deleteBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            deleteEndpoint(index);
+        });
+        
+        actionsDiv.appendChild(deleteBtn);
+        
+        listItem.appendChild(methodSpan);
+        listItem.appendChild(nameDiv);
+        listItem.appendChild(urlSpan);
+        listItem.appendChild(actionsDiv);
+        
+        // Load endpoint when clicked
+        listItem.addEventListener('click', () => {
+            loadEndpoint(endpoint);
+            // Update the timestamp when used
+            endpoint.timestamp = Date.now();
+            localStorage.setItem('postboySavedEndpoints', JSON.stringify(savedEndpoints));
+        });
+        
+        savedEndpointsList.appendChild(listItem);
+    });
+}
+
+// Save Endpoint Button Click Handler
+saveEndpointBtn.addEventListener('click', saveEndpoint);

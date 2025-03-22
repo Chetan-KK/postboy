@@ -28,6 +28,12 @@
                 <span>Toggle Theme</span>
             </button>
         </div>
+        <div class="header-saved-btn">
+            <button id="header-saved-sidebar-btn" title="Saved Endpoints">
+                <i class="fas fa-bookmark"></i>
+                <span>Saved</span>
+            </button>
+        </div>
         <button class="mobile-menu-btn">
             <span class="bar"></span>
             <span class="bar"></span>
@@ -55,6 +61,11 @@
     <!-- Sidebar Overlay -->
     <div class="sidebar-overlay"></div>
 
+    <!-- Show Saved Endpoints Button -->
+    <button id="show-saved-sidebar-btn" class="show-saved-sidebar-btn" title="Show Saved Endpoints">
+        <i class="fas fa-bookmark"></i>
+    </button>
+
     <main>
         <div class="request-container">
             <div class="url-container">
@@ -67,6 +78,9 @@
                 </select>
                 <input type="text" id="url-input" placeholder="Enter request URL">
                 <button id="send-btn">Send</button>
+                <button id="save-endpoint-btn" title="Save Endpoint">
+                    <i class="fas fa-bookmark"></i>
+                </button>
             </div>
 
             <div class="tabs">
@@ -177,6 +191,19 @@
             </div>
         </div>
     </main>
+
+    <!-- Saved Endpoints Sidebar -->
+    <div class="saved-endpoints-sidebar">
+        <div class="saved-endpoints-header">
+            <h3>Saved Endpoints</h3>
+        </div>
+        <div class="saved-endpoints-container">
+            <div class="no-saved-endpoints">No saved endpoints yet</div>
+            <ul id="saved-endpoints-list" class="saved-endpoints-list">
+                <!-- Saved endpoints will be dynamically added here -->
+            </ul>
+        </div>
+    </div>
 
     <!-- Footer -->
     <footer>
