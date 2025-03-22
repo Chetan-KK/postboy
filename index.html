@@ -72,6 +72,7 @@
             <div class="tabs">
                 <div class="tab-headers">
                     <button class="tab-btn active" data-tab="params">Params</button>
+                    <button class="tab-btn" data-tab="auth">Auth</button>
                     <button class="tab-btn" data-tab="headers">Headers</button>
                     <button class="tab-btn" data-tab="body">Body</button>
                 </div>
@@ -85,6 +86,23 @@
                                 <button class="remove-btn"><i class="fas fa-times"></i></button>
                             </div>
                             <button id="add-param-btn" class="add-btn">Add Parameter</button>
+                        </div>
+                    </div>
+                    
+                    <div class="tab-pane" id="auth-tab">
+                        <div class="auth-container">
+                            <div class="auth-type-select">
+                                <label for="auth-type">Type:</label>
+                                <select id="auth-type">
+                                    <option value="none">No Auth</option>
+                                    <option value="bearer">Bearer Token</option>
+                                </select>
+                            </div>
+                            <div id="bearer-container" class="auth-input-container hidden">
+                                <label for="bearer-token">Token:</label>
+                                <input type="text" id="bearer-token" placeholder="Enter Bearer token">
+                                <p class="auth-help">The Bearer token will be added as an Authorization header: <code>Authorization: Bearer {token}</code></p>
+                            </div>
                         </div>
                     </div>
                     

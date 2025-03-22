@@ -7,6 +7,11 @@ const requestMethodSelect = document.getElementById('request-method');
 const urlInput = document.getElementById('url-input');
 const sendBtn = document.getElementById('send-btn');
 
+// Authentication Elements
+const authTypeSelect = document.getElementById('auth-type');
+const bearerTokenInput = document.getElementById('bearer-token');
+const bearerContainer = document.getElementById('bearer-container');
+
 // Mobile Navigation Elements
 const mobileMenuBtn = document.querySelector('.mobile-menu-btn');
 const sidebar = document.querySelector('.sidebar');
@@ -196,6 +201,8 @@ const interactiveElements = [
     urlInput,
     bodyTypeSelect,
     jsonBodyTextarea,
+    authTypeSelect,
+    bearerTokenInput,
     themeToggleBtn,
     ...document.querySelectorAll('.tab-btn'),
     ...document.querySelectorAll('.add-btn'),
@@ -509,6 +516,17 @@ copyResponseBtn.addEventListener('click', () => {
         });
 });
 
+// Auth Type Change Handler
+authTypeSelect.addEventListener('change', () => {
+    const selectedType = authTypeSelect.value;
+    
+    if (selectedType === 'none') {
+        bearerContainer.classList.add('hidden');
+    } else if (selectedType === 'bearer') {
+        bearerContainer.classList.remove('hidden');
+    }
+});
+
 // Send Request
 async function sendRequest() {
     // Set loading state
@@ -548,6 +566,15 @@ async function sendRequest() {
         
         // Get headers
         const headers = getKeyValuePairs(headersContainer);
+        
+        // Add authentication headers if needed
+        const authType = authTypeSelect.value;
+        if (authType === 'bearer') {
+            const token = bearerTokenInput.value.trim();
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+        }
         
         // Prepare request options
         const options = {
@@ -741,6 +768,9 @@ handleCorsWarning();
 document.addEventListener('DOMContentLoaded', () => {
     // Apply saved theme from localStorage
     applyTheme();
+    
+    // Initialize auth type UI
+    authTypeSelect.dispatchEvent(new Event('change'));
     
     // Add syntax highlighting to JSON input when focus is lost
     jsonBodyTextarea.addEventListener('blur', function() {
