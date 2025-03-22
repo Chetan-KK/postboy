@@ -1,0 +1,771 @@
+// Main JavaScript file for Postboy
+// Theme setting is shared across all pages (index, get-docs, post-docs)
+
+// DOM Elements
+const themeToggleBtn = document.getElementById('theme-toggle-btn');
+const requestMethodSelect = document.getElementById('request-method');
+const urlInput = document.getElementById('url-input');
+const sendBtn = document.getElementById('send-btn');
+
+// Mobile Navigation Elements
+const mobileMenuBtn = document.querySelector('.mobile-menu-btn');
+const sidebar = document.querySelector('.sidebar');
+const sidebarOverlay = document.querySelector('.sidebar-overlay');
+const sidebarThemeToggleBtn = document.getElementById('sidebar-theme-toggle-btn');
+
+// Get current theme from localStorage
+const currentTheme = localStorage.getItem('postboyTheme') || 'dark-mode';
+
+// Mobile Navigation Toggle
+function toggleSidebar() {
+    sidebar.classList.toggle('active');
+    sidebarOverlay.classList.toggle('active');
+    mobileMenuBtn.classList.toggle('mobile-menu-open');
+    document.body.classList.toggle('sidebar-open');
+}
+
+// Event listeners for mobile navigation
+if (mobileMenuBtn) {
+    mobileMenuBtn.addEventListener('click', toggleSidebar);
+}
+
+if (sidebarOverlay) {
+    sidebarOverlay.addEventListener('click', toggleSidebar);
+}
+
+// Sync sidebar theme toggle button icon
+if (sidebarThemeToggleBtn) {
+    const sidebarIcon = sidebarThemeToggleBtn.querySelector('i');
+    if (currentTheme === 'light-mode') {
+        sidebarIcon.classList.remove('fa-moon');
+        sidebarIcon.classList.add('fa-sun');
+    } else {
+        sidebarIcon.classList.remove('fa-sun');
+        sidebarIcon.classList.add('fa-moon');
+    }
+    
+    // Add click event for sidebar theme toggle
+    sidebarThemeToggleBtn.addEventListener('click', () => {
+        const body = document.body;
+        const mainIcon = themeToggleBtn.querySelector('i');
+        const sidebarIcon = sidebarThemeToggleBtn.querySelector('i');
+        
+        if (body.classList.contains('dark-mode')) {
+            body.classList.remove('dark-mode');
+            body.classList.add('light-mode');
+            
+            // Update icons
+            mainIcon.classList.remove('fa-moon');
+            mainIcon.classList.add('fa-sun');
+            sidebarIcon.classList.remove('fa-moon');
+            sidebarIcon.classList.add('fa-sun');
+            
+            // Toggle highlight.js themes
+            hljsDarkTheme.disabled = true;
+            hljsLightTheme.disabled = false;
+            
+            // Save theme preference to localStorage
+            localStorage.setItem('postboyTheme', 'light-mode');
+        } else {
+            body.classList.remove('light-mode');
+            body.classList.add('dark-mode');
+            
+            // Update icons
+            mainIcon.classList.remove('fa-sun');
+            mainIcon.classList.add('fa-moon');
+            sidebarIcon.classList.remove('fa-sun');
+            sidebarIcon.classList.add('fa-moon');
+            
+            // Toggle highlight.js themes
+            hljsDarkTheme.disabled = false;
+            hljsLightTheme.disabled = true;
+            
+            // Save theme preference to localStorage
+            localStorage.setItem('postboyTheme', 'dark-mode');
+        }
+        
+        // Re-highlight visible code blocks
+        document.querySelectorAll('pre code').forEach(block => {
+            if (block.textContent) {
+                hljs.highlightElement(block);
+            }
+        });
+    });
+}
+
+// Dark/Light Mode Toggle - Main button
+themeToggleBtn.addEventListener('click', () => {
+    const body = document.body;
+    const mainIcon = themeToggleBtn.querySelector('i');
+    const sidebarIcon = sidebarThemeToggleBtn ? sidebarThemeToggleBtn.querySelector('i') : null;
+    
+    if (body.classList.contains('dark-mode')) {
+        body.classList.remove('dark-mode');
+        body.classList.add('light-mode');
+        
+        // Update icons
+        mainIcon.classList.remove('fa-moon');
+        mainIcon.classList.add('fa-sun');
+        
+        if (sidebarIcon) {
+            sidebarIcon.classList.remove('fa-moon');
+            sidebarIcon.classList.add('fa-sun');
+        }
+        
+        // Toggle highlight.js themes
+        hljsDarkTheme.disabled = true;
+        hljsLightTheme.disabled = false;
+        
+        // Save theme preference to localStorage
+        localStorage.setItem('postboyTheme', 'light-mode');
+    } else {
+        body.classList.remove('light-mode');
+        body.classList.add('dark-mode');
+        
+        // Update icons
+        mainIcon.classList.remove('fa-sun');
+        mainIcon.classList.add('fa-moon');
+        
+        if (sidebarIcon) {
+            sidebarIcon.classList.remove('fa-sun');
+            sidebarIcon.classList.add('fa-moon');
+        }
+        
+        // Toggle highlight.js themes
+        hljsDarkTheme.disabled = false;
+        hljsLightTheme.disabled = true;
+        
+        // Save theme preference to localStorage
+        localStorage.setItem('postboyTheme', 'dark-mode');
+    }
+    
+    // Re-highlight visible code blocks
+    document.querySelectorAll('pre code').forEach(block => {
+        if (block.textContent) {
+            hljs.highlightElement(block);
+        }
+    });
+});
+
+// Tab Elements
+const tabBtns = document.querySelectorAll('.tab-btn');
+const addParamBtn = document.getElementById('add-param-btn');
+const addHeaderBtn = document.getElementById('add-header-btn');
+const addFormBtn = document.getElementById('add-form-btn');
+const paramsContainer = document.getElementById('params-container');
+const headersContainer = document.getElementById('headers-container');
+const bodyTypeSelect = document.getElementById('body-type');
+const bodyFormContainer = document.getElementById('body-form-container');
+const bodyRawContainer = document.getElementById('body-raw-container');
+const jsonBodyTextarea = document.getElementById('json-body');
+
+// Response Elements
+const statusCodeElem = document.getElementById('status-code');
+const responseTimeElem = document.getElementById('response-time');
+const responseBodyElem = document.getElementById('response-body');
+const responseHeadersElem = document.getElementById('response-headers');
+const copyResponseBtn = document.getElementById('copy-response-btn');
+
+// Default response messages
+const DEFAULT_BODY_MESSAGE = 'Make a request to see the response here';
+const DEFAULT_HEADERS_MESSAGE = 'Make a request to see the response headers here';
+
+// Loading Overlay Element
+const loadingOverlay = document.getElementById('loading-overlay');
+
+// Highlight.js Theme Elements
+const hljsDarkTheme = document.getElementById('hljs-dark-theme');
+const hljsLightTheme = document.getElementById('hljs-light-theme');
+
+// Method settings
+const HTTP_METHODS = {
+    GET: { hasBody: false, useParams: true },
+    POST: { hasBody: true, useParams: false },
+    PUT: { hasBody: true, useParams: false },
+    DELETE: { hasBody: false, useParams: true },
+    HEAD: { hasBody: false, useParams: true, bodylessResponse: true }
+};
+
+// Initialize JSON syntax highlighting for the textarea
+let jsonEditor = null;
+
+// Interactive elements that should be disabled during requests
+const interactiveElements = [
+    sendBtn,
+    requestMethodSelect,
+    urlInput,
+    bodyTypeSelect,
+    jsonBodyTextarea,
+    themeToggleBtn,
+    ...document.querySelectorAll('.tab-btn'),
+    ...document.querySelectorAll('.add-btn'),
+    ...document.querySelectorAll('.remove-btn'),
+    ...document.querySelectorAll('.key-input'),
+    ...document.querySelectorAll('.value-input')
+];
+
+// Function to set loading state
+function setLoading(isLoading) {
+    if (isLoading) {
+        loadingOverlay.classList.remove('hidden');
+        
+        // Disable all interactive elements
+        interactiveElements.forEach(element => {
+            if (element) {
+                element.disabled = true;
+            }
+        });
+        
+        // Disable removal buttons
+        document.querySelectorAll('.remove-btn').forEach(btn => {
+            btn.style.pointerEvents = 'none';
+        });
+    } else {
+        loadingOverlay.classList.add('hidden');
+        
+        // Re-enable all interactive elements
+        interactiveElements.forEach(element => {
+            if (element) {
+                element.disabled = false;
+            }
+        });
+        
+        // Re-enable removal buttons
+        document.querySelectorAll('.remove-btn').forEach(btn => {
+            btn.style.pointerEvents = 'auto';
+        });
+    }
+}
+
+// Theme Management - Persist theme across pages with localStorage
+function applyTheme() {
+    const currentTheme = localStorage.getItem('postboyTheme') || 'dark-mode';
+    const body = document.body;
+    const icon = themeToggleBtn.querySelector('i');
+    
+    // Apply saved theme
+    if (currentTheme === 'light-mode') {
+        body.classList.remove('dark-mode');
+        body.classList.add('light-mode');
+        icon.classList.remove('fa-moon');
+        icon.classList.add('fa-sun');
+        
+        // Toggle highlight.js themes
+        hljsDarkTheme.disabled = true;
+        hljsLightTheme.disabled = false;
+    } else {
+        body.classList.remove('light-mode');
+        body.classList.add('dark-mode');
+        icon.classList.remove('fa-sun');
+        icon.classList.add('fa-moon');
+        
+        // Toggle highlight.js themes
+        hljsDarkTheme.disabled = false;
+        hljsLightTheme.disabled = true;
+    }
+    
+    // Sync sidebar theme toggle button icon
+    if (sidebarThemeToggleBtn) {
+        const sidebarIcon = sidebarThemeToggleBtn.querySelector('i');
+        if (currentTheme === 'light-mode') {
+            sidebarIcon.classList.remove('fa-moon');
+            sidebarIcon.classList.add('fa-sun');
+        } else {
+            sidebarIcon.classList.remove('fa-sun');
+            sidebarIcon.classList.add('fa-moon');
+        }
+    }
+}
+
+// Method Change Handler - Update UI based on selected method
+requestMethodSelect.addEventListener('change', () => {
+    const method = requestMethodSelect.value;
+    const methodConfig = HTTP_METHODS[method];
+    
+    // Toggle body tab based on whether the method can have a body
+    if (methodConfig && !methodConfig.hasBody) {
+        // If method doesn't support body, select the params tab
+        document.querySelector('.tab-btn[data-tab="params"]').click();
+        
+        // Find the body tab button and disable it
+        const bodyTabBtn = document.querySelector('.tab-btn[data-tab="body"]');
+        bodyTabBtn.classList.add('disabled');
+        bodyTabBtn.style.opacity = '0.5';
+        bodyTabBtn.style.cursor = 'not-allowed';
+        bodyTabBtn.title = `${method} requests don't support a request body`;
+    } else {
+        // Re-enable the body tab
+        const bodyTabBtn = document.querySelector('.tab-btn[data-tab="body"]');
+        bodyTabBtn.classList.remove('disabled');
+        bodyTabBtn.style.opacity = '1';
+        bodyTabBtn.style.cursor = 'pointer';
+        bodyTabBtn.title = '';
+    }
+});
+
+// Tab Navigation
+tabBtns.forEach(btn => {
+    btn.addEventListener('click', () => {
+        // Skip if tab is disabled
+        if (btn.classList.contains('disabled')) {
+            return;
+        }
+        
+        const tabId = btn.getAttribute('data-tab');
+        const tabContentId = `${tabId}-tab`;
+        
+        // Get the parent tab container
+        const tabContainer = btn.closest('.tabs, .response-tabs');
+        
+        // Remove active class from all tabs in this container
+        tabContainer.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        tabContainer.querySelectorAll('.tab-pane').forEach(p => p.classList.remove('active'));
+        
+        // Add active class to clicked tab and its content
+        btn.classList.add('active');
+        document.getElementById(tabContentId)?.classList.add('active');
+    });
+});
+
+// Add Key-Value Pair Function
+function addKeyValuePair(container, removeBtnHandler) {
+    const pairDiv = document.createElement('div');
+    pairDiv.className = 'key-value-pair';
+    
+    const keyInput = document.createElement('input');
+    keyInput.type = 'text';
+    keyInput.className = 'key-input';
+    keyInput.placeholder = 'Key';
+    
+    const valueInput = document.createElement('input');
+    valueInput.type = 'text';
+    valueInput.className = 'value-input';
+    valueInput.placeholder = 'Value';
+    
+    const removeBtn = document.createElement('button');
+    removeBtn.className = 'remove-btn';
+    removeBtn.innerHTML = '<i class="fas fa-times"></i>';
+    removeBtn.addEventListener('click', removeBtnHandler || function() {
+        pairDiv.remove();
+    });
+    
+    pairDiv.appendChild(keyInput);
+    pairDiv.appendChild(valueInput);
+    pairDiv.appendChild(removeBtn);
+    
+    // Insert before the add button
+    const addButton = container.querySelector('.add-btn');
+    container.insertBefore(pairDiv, addButton);
+    
+    // Add newly created elements to interactive elements array
+    interactiveElements.push(keyInput, valueInput, removeBtn);
+    
+    return pairDiv;
+}
+
+// Add Parameter
+addParamBtn.addEventListener('click', () => {
+    addKeyValuePair(paramsContainer);
+});
+
+// Add Header
+addHeaderBtn.addEventListener('click', () => {
+    addKeyValuePair(headersContainer);
+});
+
+// Add Form Field
+addFormBtn.addEventListener('click', () => {
+    addKeyValuePair(bodyFormContainer);
+});
+
+// Body Type Change Handler
+bodyTypeSelect.addEventListener('change', () => {
+    const selectedType = bodyTypeSelect.value;
+    
+    if (selectedType === 'none') {
+        bodyFormContainer.classList.add('hidden');
+        bodyRawContainer.classList.add('hidden');
+    } else if (selectedType === 'raw') {
+        bodyFormContainer.classList.add('hidden');
+        bodyRawContainer.classList.remove('hidden');
+    } else {
+        // form-data or x-www-form-urlencoded
+        bodyFormContainer.classList.remove('hidden');
+        bodyRawContainer.classList.add('hidden');
+    }
+});
+
+// JSON Beautify for textarea
+jsonBodyTextarea.addEventListener('input', function() {
+    try {
+        // Only attempt to format if it looks like JSON (starts with { or [)
+        const value = this.value.trim();
+        if ((value.startsWith('{') || value.startsWith('[')) && value.length > 1) {
+            const formatted = JSON.stringify(JSON.parse(value), null, 2);
+            // Only update if the parsed JSON is different from current value
+            // to avoid moving cursor during typing
+            if (formatted !== value) {
+                const cursorPosition = this.selectionStart;
+                this.value = formatted;
+                this.setSelectionRange(cursorPosition, cursorPosition);
+            }
+        }
+    } catch (e) {
+        // Not valid JSON yet, do nothing
+    }
+});
+
+// Helper: Get Key-Value Pairs
+function getKeyValuePairs(container) {
+    const pairs = {};
+    const keyValuePairDivs = container.querySelectorAll('.key-value-pair');
+    
+    keyValuePairDivs.forEach(div => {
+        const key = div.querySelector('.key-input').value.trim();
+        const value = div.querySelector('.value-input').value.trim();
+        
+        if (key) {
+            pairs[key] = value;
+        }
+    });
+    
+    return pairs;
+}
+
+// Build URL with Query Parameters
+function buildUrl(baseUrl, params) {
+    if (Object.keys(params).length === 0) return baseUrl;
+    
+    const url = new URL(baseUrl);
+    
+    for (const [key, value] of Object.entries(params)) {
+        url.searchParams.append(key, value);
+    }
+    
+    return url.toString();
+}
+
+// Format JSON with Indentation and Syntax Highlighting
+function formatJSON(json) {
+    try {
+        return JSON.stringify(JSON.parse(json), null, 2);
+    } catch (e) {
+        return json;
+    }
+}
+
+// Format Headers for Display
+function formatHeaders(headers) {
+    let result = '';
+    headers.forEach((value, key) => {
+        result += `${key}: ${value}\n`;
+    });
+    return result;
+}
+
+// Apply syntax highlighting
+function applySyntaxHighlighting(element, language, content) {
+    element.textContent = content;
+    element.className = language;
+    hljs.highlightElement(element);
+}
+
+// Copy response to clipboard
+copyResponseBtn.addEventListener('click', () => {
+    // Determine which response tab is active to know what to copy
+    const activeTab = document.querySelector('.response-tabs .tab-btn.active').getAttribute('data-tab');
+    let textToCopy = '';
+    
+    if (activeTab === 'response-body') {
+        textToCopy = responseBodyElem.textContent;
+        if (textToCopy === DEFAULT_BODY_MESSAGE) {
+            alert('No response to copy. Make a request first.');
+            return;
+        }
+    } else if (activeTab === 'response-headers') {
+        textToCopy = responseHeadersElem.textContent;
+        if (textToCopy === DEFAULT_HEADERS_MESSAGE) {
+            alert('No response headers to copy. Make a request first.');
+            return;
+        }
+    }
+    
+    // Copy to clipboard
+    navigator.clipboard.writeText(textToCopy)
+        .then(() => {
+            // Visual feedback
+            copyResponseBtn.innerHTML = '<i class="fas fa-check"></i> Copied!';
+            copyResponseBtn.classList.add('copied');
+            
+            // Reset after 2 seconds
+            setTimeout(() => {
+                copyResponseBtn.innerHTML = '<i class="fas fa-copy"></i> Copy';
+                copyResponseBtn.classList.remove('copied');
+            }, 2000);
+        })
+        .catch(err => {
+            console.error('Failed to copy text: ', err);
+            alert('Failed to copy to clipboard');
+        });
+});
+
+// Send Request
+async function sendRequest() {
+    // Set loading state
+    setLoading(true);
+    
+    // Clear previous response
+    statusCodeElem.textContent = '';
+    statusCodeElem.className = '';
+    responseTimeElem.textContent = '';
+    
+    try {
+        const method = requestMethodSelect.value;
+        let url = urlInput.value.trim();
+        
+        // Validate URL
+        if (!url) {
+            alert('Please enter a URL');
+            setLoading(false);
+            return;
+        }
+        
+        // Add https:// if not present
+        if (!url.startsWith('http://') && !url.startsWith('https://')) {
+            url = 'https://' + url;
+        }
+        
+        // Get method configuration
+        const methodConfig = HTTP_METHODS[method] || { hasBody: false, useParams: true };
+        
+        // Get parameters
+        const params = getKeyValuePairs(paramsContainer);
+        
+        // Build URL with query parameters for methods that use URL params
+        if (methodConfig.useParams) {
+            url = buildUrl(url, params);
+        }
+        
+        // Get headers
+        const headers = getKeyValuePairs(headersContainer);
+        
+        // Prepare request options
+        const options = {
+            method,
+            headers: new Headers(headers),
+        };
+        
+        // Add body for request methods that support it
+        if (methodConfig.hasBody) {
+            const bodyType = bodyTypeSelect.value;
+            
+            if (bodyType === 'raw') {
+                const jsonBody = jsonBodyTextarea.value.trim();
+                if (jsonBody) {
+                    options.headers.set('Content-Type', 'application/json');
+                    options.body = jsonBody;
+                }
+            } else if (bodyType === 'form-data') {
+                const formData = new FormData();
+                const formPairs = getKeyValuePairs(bodyFormContainer);
+                
+                for (const [key, value] of Object.entries(formPairs)) {
+                    formData.append(key, value);
+                }
+                
+                options.body = formData;
+            } else if (bodyType === 'x-www-form-urlencoded') {
+                const formPairs = getKeyValuePairs(bodyFormContainer);
+                const urlEncodedData = new URLSearchParams();
+                
+                for (const [key, value] of Object.entries(formPairs)) {
+                    urlEncodedData.append(key, value);
+                }
+                
+                options.headers.set('Content-Type', 'application/x-www-form-urlencoded');
+                options.body = urlEncodedData;
+            }
+        }
+        
+        // Start timing
+        const startTime = Date.now();
+        
+        // Send request
+        const response = await fetch(url, options);
+        
+        // Calculate response time
+        const endTime = Date.now();
+        const responseTime = endTime - startTime;
+        
+        // Update status code with color
+        statusCodeElem.textContent = response.status;
+        if (response.ok) {
+            statusCodeElem.classList.add('success');
+        } else {
+            statusCodeElem.classList.add('error');
+        }
+        
+        // Update response time
+        responseTimeElem.textContent = `${responseTime} ms`;
+        
+        // Get response headers
+        const responseHeaders = formatHeaders(response.headers);
+        applySyntaxHighlighting(responseHeadersElem, 'http', responseHeaders);
+        
+        // Handle response body (special case for HEAD method which has no body)
+        if (methodConfig.bodylessResponse) {
+            responseBodyElem.textContent = "No response body for HEAD requests";
+        } else {
+            // Get response body
+            try {
+                const contentType = response.headers.get('content-type');
+                let responseBody;
+                
+                if (contentType && contentType.includes('application/json')) {
+                    responseBody = await response.json();
+                    const formattedJson = formatJSON(JSON.stringify(responseBody));
+                    applySyntaxHighlighting(responseBodyElem, 'json', formattedJson);
+                } else if (contentType && (
+                    contentType.includes('text/html') || 
+                    contentType.includes('application/xml') || 
+                    contentType.includes('text/xml')
+                )) {
+                    responseBody = await response.text();
+                    let language = 'html';
+                    if (contentType.includes('xml')) {
+                        language = 'xml';
+                    }
+                    applySyntaxHighlighting(responseBodyElem, language, responseBody);
+                } else if (contentType && contentType.includes('text/css')) {
+                    responseBody = await response.text();
+                    applySyntaxHighlighting(responseBodyElem, 'css', responseBody);
+                } else if (contentType && contentType.includes('application/javascript')) {
+                    responseBody = await response.text();
+                    applySyntaxHighlighting(responseBodyElem, 'javascript', responseBody);
+                } else {
+                    responseBody = await response.text();
+                    // Try to detect if it's JSON
+                    try {
+                        JSON.parse(responseBody);
+                        applySyntaxHighlighting(responseBodyElem, 'json', formatJSON(responseBody));
+                    } catch (e) {
+                        // Not JSON, use plaintext
+                        applySyntaxHighlighting(responseBodyElem, 'plaintext', responseBody);
+                    }
+                }
+            } catch (error) {
+                responseBodyElem.textContent = 'Error parsing response body: ' + error.message;
+            }
+        }
+        
+    } catch (error) {
+        console.error('Request error:', error);
+        statusCodeElem.textContent = 'Error';
+        statusCodeElem.classList.add('error');
+        responseBodyElem.textContent = error.message;
+        responseHeadersElem.textContent = '';
+    } finally {
+        // Reset loading state regardless of success or failure
+        setLoading(false);
+    }
+}
+
+// Send Request Button Click Handler
+sendBtn.addEventListener('click', sendRequest);
+
+// Initialize - make sure one pair exists in each container
+if (paramsContainer.querySelectorAll('.key-value-pair').length === 0) {
+    addKeyValuePair(paramsContainer);
+}
+
+if (headersContainer.querySelectorAll('.key-value-pair').length === 0) {
+    addKeyValuePair(headersContainer);
+}
+
+// Handle CORS Warning
+function handleCorsWarning() {
+    const warningElem = document.createElement('div');
+    warningElem.className = 'cors-warning';
+    warningElem.innerHTML = `
+        <div class="cors-warning-content">
+            <p>⚠️ <strong>CORS Warning:</strong> Browser security may block cross-origin requests. 
+            For testing APIs that don't support CORS, consider using a CORS proxy or testing in an environment 
+            that allows cross-origin requests.</p>
+            <button class="cors-close-btn" aria-label="Close CORS warning">×</button>
+        </div>
+    `;
+    
+    // Add styles inline to ensure they're applied
+    warningElem.style.backgroundColor = '#fff3cd';
+    warningElem.style.color = '#856404';
+    warningElem.style.padding = '0.75rem';
+    warningElem.style.borderRadius = '4px';
+    warningElem.style.marginBottom = '1rem';
+    warningElem.style.position = 'relative';
+    
+    // Add the warning to the DOM
+    document.querySelector('main').prepend(warningElem);
+    
+    // Add event listener to close button
+    const closeBtn = warningElem.querySelector('.cors-close-btn');
+    closeBtn.style.position = 'absolute';
+    closeBtn.style.right = '10px';
+    closeBtn.style.top = '50%';
+    closeBtn.style.transform = 'translateY(-50%)';
+    closeBtn.style.backgroundColor = 'transparent';
+    closeBtn.style.border = 'none';
+    closeBtn.style.fontSize = '1.5rem';
+    closeBtn.style.fontWeight = 'bold';
+    closeBtn.style.cursor = 'pointer';
+    closeBtn.style.color = '#856404';
+    closeBtn.style.padding = '0 10px';
+    
+    closeBtn.addEventListener('click', function() {
+        warningElem.remove();
+    });
+    
+    // Add styles to the warning content
+    const contentDiv = warningElem.querySelector('.cors-warning-content');
+    contentDiv.style.display = 'flex';
+    contentDiv.style.justifyContent = 'space-between';
+    contentDiv.style.alignItems = 'center';
+    
+    // Add padding-right to the paragraph to make space for the close button
+    warningElem.querySelector('p').style.paddingRight = '40px';
+}
+
+// Show CORS warning on load
+handleCorsWarning();
+
+// Load additional languages for Highlight.js if needed
+document.addEventListener('DOMContentLoaded', () => {
+    // Apply saved theme from localStorage
+    applyTheme();
+    
+    // Add syntax highlighting to JSON input when focus is lost
+    jsonBodyTextarea.addEventListener('blur', function() {
+        try {
+            const value = this.value.trim();
+            if (value && (value.startsWith('{') || value.startsWith('['))) {
+                this.value = formatJSON(value);
+            }
+        } catch (e) {
+            // Not valid JSON, ignore
+        }
+    });
+    
+    // Hide loading overlay initially
+    setLoading(false);
+    
+    // Initialize method handling
+    requestMethodSelect.dispatchEvent(new Event('change'));
+    
+    // Add event listener for response tab changes to update the copy button state
+    document.querySelectorAll('.response-tabs .tab-btn').forEach(btn => {
+        btn.addEventListener('click', () => {
+            // Reset the copy button text when switching tabs
+            copyResponseBtn.innerHTML = '<i class="fas fa-copy"></i> Copy';
+            copyResponseBtn.classList.remove('copied');
+        });
+    });
+});

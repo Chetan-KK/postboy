@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Postboy</title>
+    <link rel="stylesheet" href="main.css">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
+    <!-- Highlight.js CSS - Adding atom-one-dark and atom-one-light themes for dark/light mode -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/atom-one-dark.min.css" id="hljs-dark-theme">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/styles/atom-one-light.min.css" id="hljs-light-theme" disabled>
+</head>
+<body class="dark-mode">
+    <header>
+        <div class="logo">
+            <a href="index.html" class="logo-link"><h1>Postboy</h1></a>
+        </div>
+        <nav class="main-nav">
+            <ul>
+                <li><a href="index.html">Home</a></li>
+                <li><a href="get-docs.html">GET Docs</a></li>
+                <li><a href="post-docs.html">POST Docs</a></li>
+            </ul>
+        </nav>
+        <div class="theme-toggle">
+            <button id="theme-toggle-btn">
+                <i class="fas fa-moon"></i>
+                <span>Toggle Theme</span>
+            </button>
+        </div>
+        <button class="mobile-menu-btn">
+            <span class="bar"></span>
+            <span class="bar"></span>
+            <span class="bar"></span>
+        </button>
+    </header>
+
+    <!-- Mobile Sidebar -->
+    <div class="sidebar">
+        <nav class="main-nav">
+            <ul>
+                <li><a href="index.html">Home</a></li>
+                <li><a href="get-docs.html">GET Docs</a></li>
+                <li><a href="post-docs.html">POST Docs</a></li>
+            </ul>
+        </nav>
+        <div class="theme-toggle">
+            <button id="sidebar-theme-toggle-btn">
+                <i class="fas fa-moon"></i>
+                <span>Toggle Theme</span>
+            </button>
+        </div>
+    </div>
+    
+    <!-- Sidebar Overlay -->
+    <div class="sidebar-overlay"></div>
+
+    <main>
+        <div class="request-container">
+            <div class="url-container">
+                <select id="request-method">
+                    <option value="GET">GET</option>
+                    <option value="POST">POST</option>
+                </select>
+                <input type="text" id="url-input" placeholder="Enter request URL">
+                <button id="send-btn">Send</button>
+            </div>
+
+            <div class="tabs">
+                <div class="tab-headers">
+                    <button class="tab-btn active" data-tab="params">Params</button>
+                    <button class="tab-btn" data-tab="headers">Headers</button>
+                    <button class="tab-btn" data-tab="body">Body</button>
+                </div>
+                
+                <div class="tab-content">
+                    <div class="tab-pane active" id="params-tab">
+                        <div class="key-value-pairs" id="params-container">
+                            <div class="key-value-pair">
+                                <input type="text" class="key-input" placeholder="Key">
+                                <input type="text" class="value-input" placeholder="Value">
+                                <button class="remove-btn"><i class="fas fa-times"></i></button>
+                            </div>
+                            <button id="add-param-btn" class="add-btn">Add Parameter</button>
+                        </div>
+                    </div>
+                    
+                    <div class="tab-pane" id="headers-tab">
+                        <div class="key-value-pairs" id="headers-container">
+                            <div class="key-value-pair">
+                                <input type="text" class="key-input" placeholder="Key">
+                                <input type="text" class="value-input" placeholder="Value">
+                                <button class="remove-btn"><i class="fas fa-times"></i></button>
+                            </div>
+                            <button id="add-header-btn" class="add-btn">Add Header</button>
+                        </div>
+                    </div>
+                    
+                    <div class="tab-pane" id="body-tab">
+                        <div class="body-input-container">
+                            <select id="body-type">
+                                <option value="none">None</option>
+                                <option value="form-data">Form Data</option>
+                                <option value="x-www-form-urlencoded">x-www-form-urlencoded</option>
+                                <option value="raw">Raw JSON</option>
+                            </select>
+                            <div id="body-form-container" class="key-value-pairs hidden">
+                                <div class="key-value-pair">
+                                    <input type="text" class="key-input" placeholder="Key">
+                                    <input type="text" class="value-input" placeholder="Value">
+                                    <button class="remove-btn"><i class="fas fa-times"></i></button>
+                                </div>
+                                <button id="add-form-btn" class="add-btn">Add Form Field</button>
+                            </div>
+                            <div id="body-raw-container" class="hidden">
+                                <textarea id="json-body" placeholder='{"key": "value"}'></textarea>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="response-container">
+            <div class="response-header">
+                <h3>Response</h3>
+                <div class="response-meta">
+                    <span id="status-code"></span>
+                    <span id="response-time"></span>
+                </div>
+            </div>
+            <div class="response-tabs">
+                <div class="tab-headers">
+                    <button class="tab-btn active" data-tab="response-body">Body</button>
+                    <button class="tab-btn" data-tab="response-headers">Headers</button>
+                    <button id="copy-response-btn" class="copy-btn" title="Copy to clipboard">
+                        <i class="fas fa-copy"></i> Copy
+                    </button>
+                </div>
+                <div class="tab-content">
+                    <div class="tab-pane active" id="response-body-tab">
+                        <pre><code id="response-body" class="json">Make a request to see the response here</code></pre>
+                    </div>
+                    <div class="tab-pane" id="response-headers-tab">
+                        <pre><code id="response-headers" class="http">Make a request to see the response headers here</code></pre>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Loading Overlay -->
+        <div id="loading-overlay" class="hidden">
+            <div class="spinner">
+                <div class="spinner-icon"></div>
+                <div class="spinner-text">Processing Request...</div>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer>
+        <div class="footer-attribution">
+            Made with <i class="fas fa-heart"></i> by <a href="https://github.com/Chetan-KK" target="_blank">Chetan-KK</a>
+        </div>
+    </footer>
+
+    <!-- Highlight.js JavaScript -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/highlight.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/languages/json.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.7.0/languages/http.min.js"></script>
+    <script src="main.js"></script>
+</body>
+</html>
