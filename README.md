@@ -6,6 +6,7 @@ A lightweight browser-based Postman clone with dark mode and support for making 
 
 - **Modern Dark/Light Mode UI**: Toggle between dark and light themes with a single click.
 - **HTTP Request Methods**: Support for GET and POST requests.
+ - **HTTP Request Methods**: Support for GET, POST and additional methods (PUT, PATCH, DELETE, HEAD).
 - **Request Customization**:
   - Query Parameters
   - Headers
@@ -23,6 +24,15 @@ A lightweight browser-based Postman clone with dark mode and support for making 
   - Loading indicator during API requests
   - Auto-disable of UI elements while requests are processing
   - Responsive design for various screen sizes
+ - **History & Collections**:
+   - Saved request history (URL, method, headers, body) persisted in localStorage
+   - Ability to load a previous request from the history panel
+   - Collections/folders support when saving endpoints to organize requests
+ - **Authentication**:
+   - Bearer Token and Basic Auth support in the Auth tab
+ - **Error Handling**:
+   - Friendly messages for network failures and invalid JSON request bodies
+   - Clearer response display when content-types are unsupported or when network errors happen
 
 ## How to Use
 

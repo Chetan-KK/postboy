@@ -12,6 +12,9 @@ const saveEndpointBtn = document.getElementById('save-endpoint-btn');
 const authTypeSelect = document.getElementById('auth-type');
 const bearerTokenInput = document.getElementById('bearer-token');
 const bearerContainer = document.getElementById('bearer-container');
+const basicContainer = document.getElementById('basic-container');
+const basicUsernameInput = document.getElementById('basic-username');
+const basicPasswordInput = document.getElementById('basic-password');
 
 // Mobile Navigation Elements
 const mobileMenuBtn = document.querySelector('.mobile-menu-btn');
@@ -26,6 +29,8 @@ const headerSavedSidebarBtn = document.getElementById('header-saved-sidebar-btn'
 const savedEndpointsList = document.getElementById('saved-endpoints-list');
 const noSavedEndpointsMsg = document.querySelector('.no-saved-endpoints');
 const mainContainer = document.querySelector('main');
+const newCollectionBtn = document.getElementById('new-collection-btn');
+const manageCollectionsBtn = document.getElementById('manage-collections-btn');
 
 // Get current theme from localStorage
 const currentTheme = localStorage.getItem('postboyTheme') || 'dark-mode';
@@ -196,6 +201,7 @@ const HTTP_METHODS = {
     GET: { hasBody: false, useParams: true },
     POST: { hasBody: true, useParams: false },
     PUT: { hasBody: true, useParams: false },
+    PATCH: { hasBody: true, useParams: false },
     DELETE: { hasBody: false, useParams: true },
     HEAD: { hasBody: false, useParams: true, bodylessResponse: true }
 };
@@ -213,6 +219,8 @@ const interactiveElements = [
     jsonBodyTextarea,
     authTypeSelect,
     bearerTokenInput,
+    basicUsernameInput,
+    basicPasswordInput,
     themeToggleBtn,
     ...document.querySelectorAll('.tab-btn'),
     ...document.querySelectorAll('.add-btn'),
@@ -532,8 +540,10 @@ authTypeSelect.addEventListener('change', () => {
     
     if (selectedType === 'none') {
         bearerContainer.classList.add('hidden');
+        basicContainer.classList.add('hidden');
     } else if (selectedType === 'bearer') {
         bearerContainer.classList.remove('hidden');
+        basicContainer.classList.add('hidden');
     }
 });
 
@@ -584,6 +594,21 @@ async function sendRequest() {
             if (token) {
                 headers['Authorization'] = `Bearer ${token}`;
             }
+        } else if (authType === 'basic') {
+            const username = basicUsernameInput.value.trim();
+            const password = basicPasswordInput.value;
+            if (username || password) {
+                try {
+                    const encoded = btoa(`${username}:${password}`);
+                    headers['Authorization'] = `Basic ${encoded}`;
+                } catch (e) {
+                    // btoa may throw if non-latin1 characters are used; fall back to utf-8 handling
+                    const utf8ToBase64 = str => {
+                        return btoa(unescape(encodeURIComponent(str)));
+                    };
+                    headers['Authorization'] = `Basic ${utf8ToBase64(`${username}:${password}`)}`;
+                }
+            }
         }
         
         // Prepare request options
@@ -599,8 +624,19 @@ async function sendRequest() {
             if (bodyType === 'raw') {
                 const jsonBody = jsonBodyTextarea.value.trim();
                 if (jsonBody) {
-                    options.headers.set('Content-Type', 'application/json');
-                    options.body = jsonBody;
+                    // Validate JSON earlier and show friendly error if invalid
+                    try {
+                        JSON.parse(jsonBody);
+                        options.headers.set('Content-Type', 'application/json');
+                        options.body = jsonBody;
+                    } catch (err) {
+                        // Invalid JSON - surface friendly message and abort
+                        setLoading(false);
+                        statusCodeElem.textContent = 'Invalid JSON';
+                        statusCodeElem.classList.add('error');
+                        responseBodyElem.textContent = 'The request body contains invalid JSON. Please fix the JSON before sending.';
+                        return;
+                    }
                 }
             } else if (bodyType === 'form-data') {
                 const formData = new FormData();
@@ -628,7 +664,31 @@ async function sendRequest() {
         const startTime = Date.now();
         
         // Send request
-        const response = await fetch(url, options);
+        let response;
+        try {
+            response = await fetch(url, options);
+        } catch (networkError) {
+            // Network failure (CORS, DNS, offline, etc.) - show friendly message
+            console.error('Network error when sending request:', networkError);
+            statusCodeElem.textContent = 'Network Error';
+            statusCodeElem.classList.add('error');
+            responseTimeElem.textContent = '';
+            responseHeadersElem.textContent = '';
+            responseBodyElem.textContent = 'Network error: ' + (networkError.message || 'Failed to send request. Check the URL or your network/CORS settings.');
+            // Save to history as failed
+            saveHistoryEntry({
+                method,
+                url,
+                params,
+                headers,
+                auth: { type: authType, token: authType === 'bearer' ? bearerTokenInput.value.trim() : '' },
+                body: options.body || null,
+                status: 'network_error',
+                timestamp: Date.now()
+            });
+            setLoading(false);
+            return;
+        }
         
         // Calculate response time
         const endTime = Date.now();
@@ -709,6 +769,17 @@ async function sendRequest() {
         }
         
         // No more auto-save functionality
+        // Save successful request into history
+        saveHistoryEntry({
+            method,
+            url,
+            params,
+            headers,
+            auth: { type: authType, token: authType === 'bearer' ? bearerTokenInput.value.trim() : '' },
+            body: options.body || null,
+            status: response.status,
+            timestamp: Date.now()
+        });
         
     } catch (error) {
         console.error('Request error:', error);
@@ -897,6 +968,9 @@ function saveEndpoint() {
         };
     }
     
+    // Get optional collection/folder name
+    const collectionName = prompt('Enter a collection/folder name (optional)', '');
+
     // Create an endpoint object with all current configuration
     const endpoint = {
         name: endpointName,
@@ -914,6 +988,7 @@ function saveEndpoint() {
             formData: bodyTypeSelect.value.includes('form') ? getKeyValuePairs(bodyFormContainer) : {}
         },
         response: responseData,
+        collection: collectionName ? collectionName.trim() : null,
         timestamp: Date.now()
     };
     
@@ -1065,96 +1140,103 @@ function renderSavedEndpoints() {
     
     noSavedEndpointsMsg.style.display = 'none';
     
-    // Sort by most recently saved/used
-    const sortedEndpoints = [...savedEndpoints].sort((a, b) => b.timestamp - a.timestamp);
-    
-    sortedEndpoints.forEach((endpoint, index) => {
-        const listItem = document.createElement('li');
-        listItem.className = 'saved-endpoint-item';
-        
-        // Create header with method and name
-        const itemHeader = document.createElement('div');
-        itemHeader.className = 'saved-endpoint-item-header';
-        
-        const methodSpan = document.createElement('span');
-        methodSpan.className = `saved-endpoint-method ${endpoint.method.toLowerCase()}`;
-        methodSpan.textContent = endpoint.method;
-        
-        const nameDiv = document.createElement('div');
-        nameDiv.className = 'saved-endpoint-name';
-        nameDiv.textContent = endpoint.name || endpoint.url;
-        nameDiv.title = endpoint.name || endpoint.url; // Add tooltip for long names
-        
-        itemHeader.appendChild(methodSpan);
-        itemHeader.appendChild(nameDiv);
-        
-        // URL display - truncate if too long
-        const urlSpan = document.createElement('span');
-        urlSpan.className = 'saved-endpoint-url';
-        
-        // Truncate URL if it's too long for display
-        let displayUrl = endpoint.url;
-        if (displayUrl.length > 40) {
-            // Keep the protocol and domain, then truncate the path
-            const urlParts = displayUrl.split('//');
-            if (urlParts.length > 1) {
-                const domainPath = urlParts[1].split('/');
-                if (domainPath.length > 1) {
-                    // Keep domain and beginning of path
-                    displayUrl = urlParts[0] + '//' + domainPath[0] + '/...';
+    // Group by collections/folders (collection may be null)
+    const grouped = {};
+    savedEndpoints.forEach(ep => {
+        const key = ep.collection || 'Uncategorized';
+        if (!grouped[key]) grouped[key] = [];
+        grouped[key].push(ep);
+    });
+
+    // For each collection render a heading and list
+    Object.keys(grouped).forEach(collectionName => {
+        const colHeader = document.createElement('div');
+        colHeader.className = 'collection-header';
+        colHeader.textContent = collectionName;
+
+        const colList = document.createElement('ul');
+        colList.className = 'collection-list';
+
+        // Sort by recent
+        const items = grouped[collectionName].sort((a, b) => b.timestamp - a.timestamp);
+
+        items.forEach((endpoint, index) => {
+            const listItem = document.createElement('li');
+            listItem.className = 'saved-endpoint-item';
+
+            const itemHeader = document.createElement('div');
+            itemHeader.className = 'saved-endpoint-item-header';
+
+            const methodSpan = document.createElement('span');
+            methodSpan.className = `saved-endpoint-method ${endpoint.method.toLowerCase()}`;
+            methodSpan.textContent = endpoint.method;
+
+            const nameDiv = document.createElement('div');
+            nameDiv.className = 'saved-endpoint-name';
+            nameDiv.textContent = endpoint.name || endpoint.url;
+            nameDiv.title = endpoint.name || endpoint.url;
+
+            itemHeader.appendChild(methodSpan);
+            itemHeader.appendChild(nameDiv);
+
+            const urlSpan = document.createElement('span');
+            urlSpan.className = 'saved-endpoint-url';
+            let displayUrl = endpoint.url;
+            if (displayUrl.length > 40) {
+                const urlParts = displayUrl.split('//');
+                if (urlParts.length > 1) {
+                    const domainPath = urlParts[1].split('/');
+                    if (domainPath.length > 1) {
+                        displayUrl = urlParts[0] + '//' + domainPath[0] + '/...';
+                    }
+                } else {
+                    displayUrl = displayUrl.substring(0, 37) + '...';
                 }
-            } else {
-                displayUrl = displayUrl.substring(0, 37) + '...';
             }
-        }
-        
-        urlSpan.textContent = displayUrl;
-        urlSpan.title = endpoint.url; // Show full URL on hover
-        
-        // Response status badge if available
-        if (endpoint.response && endpoint.response.status) {
-            const statusBadge = document.createElement('span');
-            statusBadge.className = 'saved-endpoint-status';
-            statusBadge.textContent = endpoint.response.status;
-            
-            if (endpoint.response.status >= 200 && endpoint.response.status < 400) {
-                statusBadge.classList.add('success');
-            } else {
-                statusBadge.classList.add('error');
+            urlSpan.textContent = displayUrl;
+            urlSpan.title = endpoint.url;
+
+            if (endpoint.response && endpoint.response.status) {
+                const statusBadge = document.createElement('span');
+                statusBadge.className = 'saved-endpoint-status';
+                statusBadge.textContent = endpoint.response.status;
+                if (endpoint.response.status >= 200 && endpoint.response.status < 400) {
+                    statusBadge.classList.add('success');
+                } else {
+                    statusBadge.classList.add('error');
+                }
+                listItem.appendChild(statusBadge);
             }
-            
-            listItem.appendChild(statusBadge);
-        }
-        
-        // Action buttons
-        const actionsDiv = document.createElement('div');
-        actionsDiv.className = 'saved-endpoint-actions';
-        
-        const deleteBtn = document.createElement('button');
-        deleteBtn.className = 'save-endpoint-action-btn delete-btn';
-        deleteBtn.innerHTML = '<i class="fas fa-trash"></i>';
-        deleteBtn.title = 'Delete Endpoint';
-        deleteBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            deleteEndpoint(index, endpoint);
+
+            const actionsDiv = document.createElement('div');
+            actionsDiv.className = 'saved-endpoint-actions';
+
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'save-endpoint-action-btn delete-btn';
+            deleteBtn.innerHTML = '<i class="fas fa-trash"></i>';
+            deleteBtn.title = 'Delete Endpoint';
+            deleteBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                deleteEndpoint(index, endpoint);
+            });
+
+            actionsDiv.appendChild(deleteBtn);
+
+            listItem.appendChild(itemHeader);
+            listItem.appendChild(urlSpan);
+            listItem.appendChild(actionsDiv);
+
+            listItem.addEventListener('click', () => {
+                loadEndpoint(endpoint);
+                endpoint.timestamp = Date.now();
+                localStorage.setItem('postboySavedEndpoints', JSON.stringify(savedEndpoints));
+            });
+
+            colList.appendChild(listItem);
         });
-        
-        actionsDiv.appendChild(deleteBtn);
-        
-        // Add all elements to card
-        listItem.appendChild(itemHeader);
-        listItem.appendChild(urlSpan);
-        listItem.appendChild(actionsDiv);
-        
-        // Load endpoint when clicked
-        listItem.addEventListener('click', () => {
-            loadEndpoint(endpoint);
-            // Update the timestamp when used
-            endpoint.timestamp = Date.now();
-            localStorage.setItem('postboySavedEndpoints', JSON.stringify(savedEndpoints));
-        });
-        
-        savedEndpointsList.appendChild(listItem);
+
+        savedEndpointsList.appendChild(colHeader);
+        savedEndpointsList.appendChild(colList);
     });
 }
 
@@ -1166,3 +1248,226 @@ headerSavedSidebarBtn.addEventListener('click', () => {
     savedEndpointsSidebar.classList.toggle('collapsed');
     mainContainer.classList.toggle('with-saved-sidebar');
 });
+
+// --- Request History ---
+let requestHistory = JSON.parse(localStorage.getItem('postboyRequestHistory')) || [];
+const requestHistoryList = document.getElementById('request-history-list');
+const clearHistoryBtn = document.getElementById('clear-history-btn');
+
+function saveHistoryEntry(entry) {
+    try {
+        requestHistory.push(entry);
+        // keep history bounded to last 100 entries
+        if (requestHistory.length > 100) requestHistory.shift();
+        localStorage.setItem('postboyRequestHistory', JSON.stringify(requestHistory));
+        renderRequestHistory();
+    } catch (e) {
+        console.error('Failed to save history entry', e);
+    }
+}
+
+function renderRequestHistory() {
+    if (!requestHistoryList) return;
+    requestHistoryList.innerHTML = '';
+    if (requestHistory.length === 0) {
+        const li = document.createElement('li');
+        li.className = 'history-empty';
+        li.textContent = 'No history yet';
+        requestHistoryList.appendChild(li);
+        return;
+    }
+
+    // show most recent first
+    const items = [...requestHistory].reverse();
+    items.forEach((h, idx) => {
+        const li = document.createElement('li');
+        li.className = 'history-item';
+
+        const textSpan = document.createElement('span');
+        textSpan.textContent = `${h.method} ${h.url} · ${new Date(h.timestamp).toLocaleString()}`;
+        textSpan.title = h.url;
+
+        const actions = document.createElement('div');
+        actions.className = 'history-actions';
+
+        const loadBtn = document.createElement('button');
+        loadBtn.className = 'history-action-btn';
+        loadBtn.textContent = 'Load';
+        loadBtn.title = 'Load into request form';
+        loadBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            loadHistoryItem(h);
+        });
+
+        const saveBtn = document.createElement('button');
+        saveBtn.className = 'history-action-btn';
+        saveBtn.textContent = 'Save';
+        saveBtn.title = 'Save this history item to a collection';
+        saveBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            saveHistoryItemToCollection(h);
+        });
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'history-action-btn';
+        deleteBtn.textContent = 'Delete';
+        deleteBtn.title = 'Delete this history item';
+        deleteBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            deleteHistoryItem(requestHistory.length - 1 - idx);
+        });
+
+        actions.appendChild(loadBtn);
+        actions.appendChild(saveBtn);
+        actions.appendChild(deleteBtn);
+
+        li.appendChild(textSpan);
+        li.appendChild(actions);
+
+        // clicking anywhere on the item loads it
+        li.addEventListener('click', () => {
+            loadHistoryItem(h);
+        });
+
+        requestHistoryList.appendChild(li);
+    });
+}
+
+function deleteHistoryItem(index) {
+    if (index < 0 || index >= requestHistory.length) return;
+    if (!confirm('Delete this history entry?')) return;
+    requestHistory.splice(index, 1);
+    localStorage.setItem('postboyRequestHistory', JSON.stringify(requestHistory));
+    renderRequestHistory();
+}
+
+function saveHistoryItemToCollection(h) {
+    const defaultName = `${h.method} ${h.url}`;
+    const name = prompt('Name for saved endpoint', defaultName);
+    if (!name) return;
+    const collection = prompt('Collection name (optional)', '');
+
+    const endpoint = {
+        name,
+        method: h.method,
+        url: h.url,
+        params: h.params || {},
+        headers: h.headers || {},
+        auth: h.auth || { type: 'none', token: '' },
+        body: {
+            type: typeof h.body === 'string' ? 'raw' : 'none',
+            rawJson: typeof h.body === 'string' ? h.body : '',
+            formData: {}
+        },
+        response: null,
+        collection: collection ? collection.trim() : null,
+        timestamp: Date.now()
+    };
+
+    savedEndpoints.push(endpoint);
+    localStorage.setItem('postboySavedEndpoints', JSON.stringify(savedEndpoints));
+    renderSavedEndpoints();
+}
+
+// New collection button handler - creates an empty placeholder endpoint to define collection
+if (newCollectionBtn) {
+    newCollectionBtn.addEventListener('click', () => {
+        const col = prompt('Enter new collection name');
+        if (!col) return;
+        // Create a hidden placeholder endpoint as a way to make the collection appear
+        const placeholder = {
+            name: '(collection) ' + col,
+            method: 'GET',
+            url: '',
+            params: {},
+            headers: {},
+            auth: { type: 'none', token: '' },
+            body: { type: 'none', rawJson: '', formData: {} },
+            response: null,
+            collection: col.trim(),
+            timestamp: Date.now()
+        };
+        savedEndpoints.push(placeholder);
+        localStorage.setItem('postboySavedEndpoints', JSON.stringify(savedEndpoints));
+        renderSavedEndpoints();
+    });
+}
+
+// Manage collections - simple delete-all-in-collection flow
+if (manageCollectionsBtn) {
+    manageCollectionsBtn.addEventListener('click', () => {
+        // list distinct collections
+        const collections = Array.from(new Set(savedEndpoints.map(ep => ep.collection).filter(Boolean)));
+        if (collections.length === 0) {
+            alert('No collections available');
+            return;
+        }
+        const chosen = prompt('Collections:\n' + collections.join('\n') + '\n\nEnter a collection name to DELETE all endpoints inside it (or Cancel)');
+        if (!chosen) return;
+        if (!collections.includes(chosen)) {
+            alert('Collection not found');
+            return;
+        }
+        if (!confirm(`Delete all endpoints in collection "${chosen}"? This cannot be undone.`)) return;
+        savedEndpoints = savedEndpoints.filter(ep => ep.collection !== chosen);
+        localStorage.setItem('postboySavedEndpoints', JSON.stringify(savedEndpoints));
+        renderSavedEndpoints();
+    });
+}
+
+function loadHistoryItem(h) {
+    requestMethodSelect.value = h.method;
+    requestMethodSelect.dispatchEvent(new Event('change'));
+    urlInput.value = h.url;
+
+    // Load params, headers, auth, body
+    clearContainer(paramsContainer);
+    if (h.params && Object.keys(h.params).length > 0) {
+        for (const [k, v] of Object.entries(h.params)) {
+            const pair = addKeyValuePair(paramsContainer);
+            pair.querySelector('.key-input').value = k;
+            pair.querySelector('.value-input').value = v;
+        }
+    } else {
+        addKeyValuePair(paramsContainer);
+    }
+
+    clearContainer(headersContainer);
+    if (h.headers && Object.keys(h.headers).length > 0) {
+        for (const [k, v] of Object.entries(h.headers)) {
+            const pair = addKeyValuePair(headersContainer);
+            pair.querySelector('.key-input').value = k;
+            pair.querySelector('.value-input').value = v;
+        }
+    } else {
+        addKeyValuePair(headersContainer);
+    }
+
+    if (h.auth) {
+        authTypeSelect.value = h.auth.type || 'none';
+        authTypeSelect.dispatchEvent(new Event('change'));
+        if (h.auth.type === 'bearer') bearerTokenInput.value = h.auth.token || '';
+    }
+
+    if (h.body) {
+        // if it was raw JSON, place it back
+        if (typeof h.body === 'string') {
+            bodyTypeSelect.value = 'raw';
+            bodyTypeSelect.dispatchEvent(new Event('change'));
+            jsonBodyTextarea.value = h.body;
+        }
+    }
+}
+
+if (clearHistoryBtn) {
+    clearHistoryBtn.addEventListener('click', () => {
+        if (confirm('Clear request history?')) {
+            requestHistory = [];
+            localStorage.removeItem('postboyRequestHistory');
+            renderRequestHistory();
+        }
+    });
+}
+
+// render history on init
+renderRequestHistory();

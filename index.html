@@ -68,6 +68,7 @@
                     <option value="GET">GET</option>
                     <option value="POST">POST</option>
                     <option value="PUT">PUT</option>
+                    <option value="PATCH">PATCH</option>
                     <option value="DELETE">DELETE</option>
                     <option value="HEAD">HEAD</option>
                 </select>
@@ -105,12 +106,20 @@
                                 <select id="auth-type">
                                     <option value="none">No Auth</option>
                                     <option value="bearer">Bearer Token</option>
+                                    <option value="basic">Basic Auth</option>
                                 </select>
                             </div>
                             <div id="bearer-container" class="auth-input-container hidden">
                                 <label for="bearer-token">Token:</label>
                                 <input type="text" id="bearer-token" placeholder="Enter Bearer token">
                                 <p class="auth-help">The Bearer token will be added as an Authorization header: <code>Authorization: Bearer {token}</code></p>
+                            </div>
+                            <div id="basic-container" class="auth-input-container hidden">
+                                <label for="basic-username">Username:</label>
+                                <input type="text" id="basic-username" placeholder="Enter username">
+                                <label for="basic-password">Password:</label>
+                                <input type="password" id="basic-password" placeholder="Enter password">
+                                <p class="auth-help">Basic auth will be added as an Authorization header: <code>Authorization: Basic base64(username:password)</code></p>
                             </div>
                         </div>
                     </div>
@@ -191,8 +200,23 @@
     <div class="saved-endpoints-sidebar">
         <div class="saved-endpoints-header">
             <h3>Saved Endpoints</h3>
+            <div class="saved-header-actions">
+                <button id="new-collection-btn" title="Create new collection">New Collection</button>
+                <button id="manage-collections-btn" title="Manage collections">Manage</button>
+            </div>
         </div>
         <div class="saved-endpoints-container">
+            <!-- Request History Section -->
+            <div class="history-section">
+                <div class="history-header">
+                    <h4>History</h4>
+                    <button id="clear-history-btn" title="Clear history">Clear</button>
+                </div>
+                <ul id="request-history-list" class="request-history-list">
+                    <!-- History entries will be dynamically added here -->
+                </ul>
+            </div>
+
             <div class="no-saved-endpoints">No saved endpoints yet</div>
             <ul id="saved-endpoints-list" class="saved-endpoints-list">
                 <!-- Saved endpoints will be dynamically added here -->
