@@ -124,7 +124,9 @@ themeToggleBtn.addEventListener('click', () => {
     const body = document.body;
     const mainIcon = themeToggleBtn.querySelector('i');
     const sidebarIcon = sidebarThemeToggleBtn ? sidebarThemeToggleBtn.querySelector('i') : null;
-    
+    // Respect reduced motion preference
+    const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
     if (body.classList.contains('dark-mode')) {
         body.classList.remove('dark-mode');
         body.classList.add('light-mode');
@@ -144,6 +146,9 @@ themeToggleBtn.addEventListener('click', () => {
         
         // Save theme preference to localStorage
         localStorage.setItem('postboyTheme', 'light-mode');
+        // update aria-pressed
+        themeToggleBtn.setAttribute('aria-pressed', 'true');
+        if (!prefersReduced) mainIcon.style.transform = 'rotate(360deg)';
     } else {
         body.classList.remove('light-mode');
         body.classList.add('dark-mode');
@@ -163,6 +168,9 @@ themeToggleBtn.addEventListener('click', () => {
         
         // Save theme preference to localStorage
         localStorage.setItem('postboyTheme', 'dark-mode');
+        // update aria-pressed
+        themeToggleBtn.setAttribute('aria-pressed', 'false');
+        if (!prefersReduced) mainIcon.style.transform = 'rotate(-360deg)';
     }
     
     // Re-highlight visible code blocks
@@ -171,6 +179,11 @@ themeToggleBtn.addEventListener('click', () => {
             hljs.highlightElement(block);
         }
     });
+
+    // reset transform after animation completes (if used)
+    setTimeout(() => {
+        if (mainIcon) mainIcon.style.transform = '';
+    }, 300);
 });
 
 // Tab Elements
