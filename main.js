@@ -31,6 +31,13 @@ const noSavedEndpointsMsg = document.querySelector('.no-saved-endpoints');
 const mainContainer = document.querySelector('main');
 const newCollectionBtn = document.getElementById('new-collection-btn');
 const manageCollectionsBtn = document.getElementById('manage-collections-btn');
+const exportBtn = document.getElementById('export-btn');
+const importFileInput = document.getElementById('import-file');
+const importBtn = document.getElementById('import-btn');
+const envSelect = document.getElementById('env-select');
+const manageEnvsBtn = document.getElementById('manage-envs-btn');
+const corsProxyUrlInput = document.getElementById('cors-proxy-url');
+const corsProxyToggle = document.getElementById('cors-proxy-toggle');
 
 // Get current theme from localStorage
 const currentTheme = localStorage.getItem('postboyTheme') || 'dark-mode';
@@ -560,6 +567,8 @@ async function sendRequest() {
     try {
         const method = requestMethodSelect.value;
         let url = urlInput.value.trim();
+    // replace environment variables in URL
+    url = replaceEnvVars(url);
         
         // Validate URL
         if (!url) {
@@ -578,35 +587,50 @@ async function sendRequest() {
         
         // Get parameters
         const params = getKeyValuePairs(paramsContainer);
+        // replace env variables in params
+        const paramsReplaced = {};
+        for (const [k, v] of Object.entries(params)) {
+            const key = replaceEnvVars(k);
+            const val = replaceEnvVars(v);
+            if (key) paramsReplaced[key] = val;
+        }
         
         // Build URL with query parameters for methods that use URL params
         if (methodConfig.useParams) {
-            url = buildUrl(url, params);
+            url = buildUrl(url, paramsReplaced);
         }
         
         // Get headers
-        const headers = getKeyValuePairs(headersContainer);
+        let headers = getKeyValuePairs(headersContainer);
+        // replace env vars in headers
+        const headersReplaced = {};
+        for (const [k, v] of Object.entries(headers)) {
+            const key = replaceEnvVars(k);
+            const val = replaceEnvVars(v);
+            if (key) headersReplaced[key] = val;
+        }
+        headers = headersReplaced;
         
         // Add authentication headers if needed
         const authType = authTypeSelect.value;
         if (authType === 'bearer') {
             const token = bearerTokenInput.value.trim();
             if (token) {
-                headers['Authorization'] = `Bearer ${token}`;
+                headers['Authorization'] = `Bearer ${replaceEnvVars(token)}`;
             }
         } else if (authType === 'basic') {
             const username = basicUsernameInput.value.trim();
             const password = basicPasswordInput.value;
             if (username || password) {
                 try {
-                    const encoded = btoa(`${username}:${password}`);
+                    const encoded = btoa(`${replaceEnvVars(username)}:${replaceEnvVars(password)}`);
                     headers['Authorization'] = `Basic ${encoded}`;
                 } catch (e) {
                     // btoa may throw if non-latin1 characters are used; fall back to utf-8 handling
                     const utf8ToBase64 = str => {
                         return btoa(unescape(encodeURIComponent(str)));
                     };
-                    headers['Authorization'] = `Basic ${utf8ToBase64(`${username}:${password}`)}`;
+                    headers['Authorization'] = `Basic ${utf8ToBase64(`${replaceEnvVars(username)}:${replaceEnvVars(password)}`)}`;
                 }
             }
         }
@@ -624,11 +648,13 @@ async function sendRequest() {
             if (bodyType === 'raw') {
                 const jsonBody = jsonBodyTextarea.value.trim();
                 if (jsonBody) {
+                    // replace env vars in raw body
+                    const replacedBody = replaceEnvVars(jsonBody);
                     // Validate JSON earlier and show friendly error if invalid
                     try {
-                        JSON.parse(jsonBody);
+                        JSON.parse(replacedBody);
                         options.headers.set('Content-Type', 'application/json');
-                        options.body = jsonBody;
+                        options.body = replacedBody;
                     } catch (err) {
                         // Invalid JSON - surface friendly message and abort
                         setLoading(false);
@@ -643,7 +669,7 @@ async function sendRequest() {
                 const formPairs = getKeyValuePairs(bodyFormContainer);
                 
                 for (const [key, value] of Object.entries(formPairs)) {
-                    formData.append(key, value);
+                    formData.append(replaceEnvVars(key), replaceEnvVars(value));
                 }
                 
                 options.body = formData;
@@ -652,7 +678,7 @@ async function sendRequest() {
                 const urlEncodedData = new URLSearchParams();
                 
                 for (const [key, value] of Object.entries(formPairs)) {
-                    urlEncodedData.append(key, value);
+                    urlEncodedData.append(replaceEnvVars(key), replaceEnvVars(value));
                 }
                 
                 options.headers.set('Content-Type', 'application/x-www-form-urlencoded');
@@ -660,7 +686,10 @@ async function sendRequest() {
             }
         }
         
-        // Start timing
+    // apply CORS proxy if enabled
+    url = applyCorsProxy(url);
+
+    // Start timing
         const startTime = Date.now();
         
         // Send request
@@ -709,62 +738,55 @@ async function sendRequest() {
         const responseHeaders = formatHeaders(response.headers);
         applySyntaxHighlighting(responseHeadersElem, 'http', responseHeaders);
         
-        // Variables to store response info
         let responseBody = '';
         let responseType = 'text';
-        
+
         // Handle response body (special case for HEAD method which has no body)
         if (methodConfig.bodylessResponse) {
             responseBodyElem.textContent = "No response body for HEAD requests";
             responseBody = "No response body for HEAD requests";
+            if (responseRawElem) responseRawElem.textContent = responseBody;
+            if (responsePreviewFrame) responsePreviewFrame.srcdoc = '';
         } else {
-            // Get response body
             try {
-                const contentType = response.headers.get('content-type');
-                
-                if (contentType && contentType.includes('application/json')) {
-                    const jsonResponse = await response.json();
-                    responseBody = JSON.stringify(jsonResponse);
+                const contentType = (response.headers.get('content-type') || '').toLowerCase();
+                // read as text first (we'll parse JSON if needed)
+                const rawText = await response.text();
+                responseBody = rawText;
+
+                // Raw view
+                if (responseRawElem) responseRawElem.textContent = rawText;
+
+                // Pretty / syntax-highlighted view
+                if (contentType.includes('application/json')) {
                     responseType = 'json';
-                    const formattedJson = formatJSON(responseBody);
-                    applySyntaxHighlighting(responseBodyElem, 'json', formattedJson);
-                } else if (contentType && (
-                    contentType.includes('text/html') || 
-                    contentType.includes('application/xml') || 
-                    contentType.includes('text/xml')
-                )) {
-                    responseBody = await response.text();
-                    if (contentType.includes('html')) {
-                        responseType = 'html';
-                    } else {
-                        responseType = 'xml';
-                    }
-                    applySyntaxHighlighting(responseBodyElem, responseType, responseBody);
-                } else if (contentType && contentType.includes('text/css')) {
-                    responseBody = await response.text();
+                    applySyntaxHighlighting(responseBodyElem, 'json', formatJSON(rawText));
+                } else if (contentType.includes('text/html') || contentType.includes('application/xml') || contentType.includes('text/xml')) {
+                    if (contentType.includes('html')) responseType = 'html'; else responseType = 'xml';
+                    applySyntaxHighlighting(responseBodyElem, responseType, rawText);
+                    if (responsePreviewFrame) responsePreviewFrame.srcdoc = rawText;
+                } else if (contentType.includes('text/css')) {
                     responseType = 'css';
-                    applySyntaxHighlighting(responseBodyElem, 'css', responseBody);
-                } else if (contentType && contentType.includes('application/javascript')) {
-                    responseBody = await response.text();
+                    applySyntaxHighlighting(responseBodyElem, 'css', rawText);
+                } else if (contentType.includes('application/javascript') || contentType.includes('text/javascript')) {
                     responseType = 'javascript';
-                    applySyntaxHighlighting(responseBodyElem, 'javascript', responseBody);
+                    applySyntaxHighlighting(responseBodyElem, 'javascript', rawText);
                 } else {
-                    responseBody = await response.text();
-                    // Try to detect if it's JSON
+                    // Try to detect JSON
                     try {
-                        JSON.parse(responseBody);
+                        JSON.parse(rawText);
                         responseType = 'json';
-                        applySyntaxHighlighting(responseBodyElem, 'json', formatJSON(responseBody));
+                        applySyntaxHighlighting(responseBodyElem, 'json', formatJSON(rawText));
                     } catch (e) {
-                        // Not JSON, use plaintext
                         responseType = 'plaintext';
-                        applySyntaxHighlighting(responseBodyElem, 'plaintext', responseBody);
+                        applySyntaxHighlighting(responseBodyElem, 'plaintext', rawText);
                     }
                 }
             } catch (error) {
                 responseBody = 'Error parsing response body: ' + error.message;
                 responseType = 'error';
                 responseBodyElem.textContent = responseBody;
+                if (responseRawElem) responseRawElem.textContent = responseBody;
             }
         }
         
@@ -1239,6 +1261,162 @@ function renderSavedEndpoints() {
         savedEndpointsList.appendChild(colList);
     });
 }
+
+// --- Environments ---
+let environments = JSON.parse(localStorage.getItem('postboyEnvironments')) || {};
+let currentEnvName = localStorage.getItem('postboyCurrentEnv') || null;
+
+function saveEnvironments() {
+    localStorage.setItem('postboyEnvironments', JSON.stringify(environments));
+}
+
+function renderEnvironmentOptions() {
+    if (!envSelect) return;
+    envSelect.innerHTML = '';
+    const defaultOpt = document.createElement('option');
+    defaultOpt.value = '';
+    defaultOpt.textContent = 'No Environment';
+    envSelect.appendChild(defaultOpt);
+
+    Object.keys(environments).forEach(name => {
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        if (name === currentEnvName) opt.selected = true;
+        envSelect.appendChild(opt);
+    });
+}
+
+function manageEnvironments() {
+    // simple prompt-based editor: list envs and allow create/edit/delete
+    const names = Object.keys(environments);
+    const action = prompt('Environments:\n' + (names.length ? names.join('\n') : '(none)') + '\n\nType:\n  new NAME - to create\n  edit NAME - to edit JSON\n  delete NAME - to delete\n\nOr Cancel');
+    if (!action) return;
+    const parts = action.split(' ');
+    const cmd = parts[0];
+    const name = parts.slice(1).join(' ').trim();
+    if (cmd === 'new' && name) {
+        if (environments[name]) { alert('Environment exists'); return; }
+        const raw = prompt('Enter variables as JSON, e.g. {"baseUrl":"https://api.example.com"}');
+        try { environments[name] = raw ? JSON.parse(raw) : {}; saveEnvironments(); renderEnvironmentOptions(); } catch (e) { alert('Invalid JSON'); }
+    } else if (cmd === 'edit' && name) {
+        if (!environments[name]) { alert('Not found'); return; }
+        const raw = prompt('Edit variables as JSON', JSON.stringify(environments[name], null, 2));
+        try { environments[name] = raw ? JSON.parse(raw) : {}; saveEnvironments(); renderEnvironmentOptions(); } catch (e) { alert('Invalid JSON'); }
+    } else if (cmd === 'delete' && name) {
+        if (!environments[name]) { alert('Not found'); return; }
+        if (!confirm('Delete environment ' + name + '?')) return;
+        delete environments[name]; saveEnvironments(); if (currentEnvName === name) { currentEnvName = null; localStorage.removeItem('postboyCurrentEnv'); } renderEnvironmentOptions();
+    } else {
+        alert('Unknown command');
+    }
+}
+
+// wire env select change
+if (envSelect) {
+    envSelect.addEventListener('change', () => {
+        currentEnvName = envSelect.value || null;
+        localStorage.setItem('postboyCurrentEnv', currentEnvName || '');
+    });
+}
+
+if (manageEnvsBtn) manageEnvsBtn.addEventListener('click', manageEnvironments);
+
+function replaceEnvVars(str) {
+    if (!str || !currentEnvName || !environments[currentEnvName]) return str;
+    return str.replace(/{{\s*([^}]+)\s*}}/g, (m, key) => {
+        return environments[currentEnvName][key] != null ? environments[currentEnvName][key] : m;
+    });
+}
+
+// --- Export / Import ---
+if (exportBtn) {
+    exportBtn.addEventListener('click', () => {
+        const payload = {
+            info: { name: 'Postboy Export', exportedAt: new Date().toISOString() },
+            savedEndpoints,
+            environments
+        };
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'postboy-export-' + Date.now() + '.json';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+    });
+}
+
+if (importFileInput) {
+    importFileInput.addEventListener('change', (e) => {
+        const f = e.target.files[0];
+        if (!f) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            try {
+                const data = JSON.parse(ev.target.result);
+                const incoming = data.savedEndpoints || data.items || [];
+                const incomingEnvs = data.environments || data.env || data.environments || {};
+                if (incoming.length === 0 && Object.keys(incomingEnvs).length === 0) { alert('No endpoints or environments found'); return; }
+                if (!confirm('Import will merge into existing saved endpoints and environments. Continue?')) return;
+                // merge endpoints (keep timestamps)
+                incoming.forEach(ep => { ep.timestamp = ep.timestamp || Date.now(); savedEndpoints.push(ep); });
+                // merge envs
+                Object.keys(incomingEnvs).forEach(k => { environments[k] = incomingEnvs[k]; });
+                saveEnvironments();
+                localStorage.setItem('postboySavedEndpoints', JSON.stringify(savedEndpoints));
+                renderSavedEndpoints();
+                renderEnvironmentOptions();
+                alert('Import complete');
+            } catch (err) {
+                alert('Failed to import: ' + err.message);
+            }
+        };
+        reader.readAsText(f);
+    });
+}
+
+if (importBtn && importFileInput) {
+    importBtn.addEventListener('click', () => importFileInput.click());
+}
+
+// --- CORS Proxy handling ---
+function applyCorsProxy(url) {
+    try {
+        const enabled = corsProxyToggle ? corsProxyToggle.checked : false;
+        const proxy = corsProxyUrlInput ? corsProxyUrlInput.value.trim() : '';
+        if (enabled && proxy) {
+            // ensure proxy ends with '/'
+            const p = proxy.endsWith('/') ? proxy : proxy + '/';
+            return p + url;
+        }
+    } catch (e) {}
+    return url;
+}
+
+// --- Response view tabs ---
+const respViewBtns = document.querySelectorAll('.resp-view-btn');
+const responseRawElem = document.getElementById('response-raw');
+const responsePreviewFrame = document.getElementById('response-preview-frame');
+
+function setActiveResponseView(view) {
+    document.querySelectorAll('.resp-view-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.response-views pre, .response-views .response-preview').forEach(el => el.classList.add('hidden'));
+    const btn = document.querySelector(`.resp-view-btn[data-view="${view}"]`);
+    if (btn) btn.classList.add('active');
+    if (view === 'raw') document.querySelector('.response-raw').classList.remove('hidden');
+    else if (view === 'pretty') document.querySelector('.response-pretty').classList.remove('hidden');
+    else if (view === 'preview') document.querySelector('.response-preview').classList.remove('hidden');
+}
+
+document.addEventListener('click', (e) => {
+    const btn = e.target.closest('.resp-view-btn');
+    if (btn) {
+        setActiveResponseView(btn.getAttribute('data-view'));
+    }
+});
 
 // Save Endpoint Button Click Handler
 saveEndpointBtn.addEventListener('click', saveEndpoint);

@@ -178,7 +178,18 @@
                 </div>
                 <div class="tab-content">
                     <div class="tab-pane active" id="response-body-tab">
-                        <pre><code id="response-body" class="json">Make a request to see the response here</code></pre>
+                        <div class="response-body-views">
+                            <div class="response-views-tabs">
+                                <button class="resp-view-btn active" data-view="pretty">Pretty</button>
+                                <button class="resp-view-btn" data-view="raw">Raw</button>
+                                <button class="resp-view-btn" data-view="preview">Preview</button>
+                            </div>
+                            <div class="response-views">
+                                <pre class="response-raw hidden"><code id="response-raw" class="plaintext"></code></pre>
+                                <pre class="response-pretty"><code id="response-body" class="json">Make a request to see the response here</code></pre>
+                                <div class="response-preview hidden"><iframe id="response-preview-frame" sandbox="allow-same-origin allow-scripts"></iframe></div>
+                            </div>
+                        </div>
                     </div>
                     <div class="tab-pane" id="response-headers-tab">
                         <pre><code id="response-headers" class="http">Make a request to see the response headers here</code></pre>
@@ -203,6 +214,11 @@
             <div class="saved-header-actions">
                 <button id="new-collection-btn" title="Create new collection">New Collection</button>
                 <button id="manage-collections-btn" title="Manage collections">Manage</button>
+                <button id="export-btn" title="Export saved requests">Export</button>
+                <label class="import-label" title="Import saved requests">
+                    <input type="file" id="import-file" accept="application/json" hidden>
+                    <button id="import-btn">Import</button>
+                </label>
             </div>
         </div>
         <div class="saved-endpoints-container">
@@ -215,6 +231,18 @@
                 <ul id="request-history-list" class="request-history-list">
                     <!-- History entries will be dynamically added here -->
                 </ul>
+            </div>
+
+            <div class="env-section">
+                <label for="env-select">Environment:</label>
+                <select id="env-select"></select>
+                <button id="manage-envs-btn" title="Manage environments">Manage Envs</button>
+            </div>
+
+            <div class="cors-section">
+                <label for="cors-proxy-url">CORS Proxy:</label>
+                <input type="text" id="cors-proxy-url" placeholder="https://cors-anywhere.herokuapp.com/">
+                <label class="cors-toggle-label"><input type="checkbox" id="cors-proxy-toggle"> Enable</label>
             </div>
 
             <div class="no-saved-endpoints">No saved endpoints yet</div>
