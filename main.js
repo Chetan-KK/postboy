@@ -21,7 +21,7 @@ const sidebarThemeToggleBtn = document.getElementById('sidebar-theme-toggle-btn'
 
 // Saved Endpoints Elements
 const savedEndpointsSidebar = document.querySelector('.saved-endpoints-sidebar');
-const showSavedSidebarBtn = document.getElementById('show-saved-sidebar-btn');
+const showSavedSidebarBtn = null;
 const headerSavedSidebarBtn = document.getElementById('header-saved-sidebar-btn');
 const savedEndpointsList = document.getElementById('saved-endpoints-list');
 const noSavedEndpointsMsg = document.querySelector('.no-saved-endpoints');
@@ -830,40 +830,30 @@ document.addEventListener('DOMContentLoaded', () => {
     
     // Handle window resize for responsive sidebar
     window.addEventListener('resize', () => {
+        // On smaller screens, make sure sidebar is properly adjusted for mobile view
         if (window.innerWidth <= 768) {
-            savedEndpointsSidebar.classList.add('collapsed');
-            mainContainer.classList.remove('with-saved-sidebar');
-            showSavedSidebarBtn.style.display = 'flex';
-        } else if (!savedEndpointsSidebar.classList.contains('collapsed')) {
-            mainContainer.classList.add('with-saved-sidebar');
-            showSavedSidebarBtn.style.display = 'none';
+            // For mobile view, sidebar takes full width when open
+            if (!savedEndpointsSidebar.classList.contains('collapsed')) {
+                mainContainer.classList.add('with-saved-sidebar');
+            } else {
+                mainContainer.classList.remove('with-saved-sidebar');
+            }
         } else {
+            // For desktop view, adjust main container margin when sidebar is open
+            if (!savedEndpointsSidebar.classList.contains('collapsed')) {
+                mainContainer.classList.add('with-saved-sidebar');
+            } else {
+                mainContainer.classList.remove('with-saved-sidebar');
+            }
         }
     });
 });
 
-// Show Saved Endpoints Sidebar Button
-showSavedSidebarBtn.addEventListener('click', () => {
-    savedEndpointsSidebar.classList.remove('collapsed');
-    mainContainer.classList.add('with-saved-sidebar');
-});
-
-// Header Saved Endpoints Button
-headerSavedSidebarBtn.addEventListener('click', () => {
-    savedEndpointsSidebar.classList.toggle('collapsed');
-    mainContainer.classList.toggle('with-saved-sidebar');
-});
-
-// Initialize sidebar state (open by default on larger screens, collapsed on mobile)
+// Initialize sidebar state (closed by default on all screen sizes)
 function initializeSidebarState() {
-    if (window.innerWidth <= 768) {
-        savedEndpointsSidebar.classList.add('collapsed');
-        mainContainer.classList.remove('with-saved-sidebar');
-        showSavedSidebarBtn.style.display = 'flex';
-    } else {
-        mainContainer.classList.add('with-saved-sidebar');
-        showSavedSidebarBtn.style.display = 'none';
-    }
+    // Always start with the sidebar collapsed regardless of screen size
+    savedEndpointsSidebar.classList.add('collapsed');
+    mainContainer.classList.remove('with-saved-sidebar');
 }
 
 // Saved Endpoints Logic
@@ -1042,13 +1032,19 @@ function loadEndpoint(endpoint) {
 }
 
 // Delete a saved endpoint
-function deleteEndpoint(index) {
-    const endpoint = savedEndpoints[index];
-    
+function deleteEndpoint(index, endpoint) {
     if (confirm(`Are you sure you want to delete "${endpoint.name}"?`)) {
-        savedEndpoints.splice(index, 1);
-        localStorage.setItem('postboySavedEndpoints', JSON.stringify(savedEndpoints));
-        renderSavedEndpoints();
+        // Find the actual index of this endpoint in the original array
+        const actualIndex = savedEndpoints.findIndex(ep => 
+            ep.name === endpoint.name && 
+            ep.url === endpoint.url && 
+            ep.timestamp === endpoint.timestamp);
+        
+        if (actualIndex !== -1) {
+            savedEndpoints.splice(actualIndex, 1);
+            localStorage.setItem('postboySavedEndpoints', JSON.stringify(savedEndpoints));
+            renderSavedEndpoints();
+        }
     }
 }
 
@@ -1076,17 +1072,44 @@ function renderSavedEndpoints() {
         const listItem = document.createElement('li');
         listItem.className = 'saved-endpoint-item';
         
+        // Create header with method and name
+        const itemHeader = document.createElement('div');
+        itemHeader.className = 'saved-endpoint-item-header';
+        
         const methodSpan = document.createElement('span');
         methodSpan.className = `saved-endpoint-method ${endpoint.method.toLowerCase()}`;
         methodSpan.textContent = endpoint.method;
         
-        const urlSpan = document.createElement('span');
-        urlSpan.className = 'saved-endpoint-url';
-        urlSpan.textContent = endpoint.url;
-        
         const nameDiv = document.createElement('div');
         nameDiv.className = 'saved-endpoint-name';
         nameDiv.textContent = endpoint.name || endpoint.url;
+        nameDiv.title = endpoint.name || endpoint.url; // Add tooltip for long names
+        
+        itemHeader.appendChild(methodSpan);
+        itemHeader.appendChild(nameDiv);
+        
+        // URL display - truncate if too long
+        const urlSpan = document.createElement('span');
+        urlSpan.className = 'saved-endpoint-url';
+        
+        // Truncate URL if it's too long for display
+        let displayUrl = endpoint.url;
+        if (displayUrl.length > 40) {
+            // Keep the protocol and domain, then truncate the path
+            const urlParts = displayUrl.split('//');
+            if (urlParts.length > 1) {
+                const domainPath = urlParts[1].split('/');
+                if (domainPath.length > 1) {
+                    // Keep domain and beginning of path
+                    displayUrl = urlParts[0] + '//' + domainPath[0] + '/...';
+                }
+            } else {
+                displayUrl = displayUrl.substring(0, 37) + '...';
+            }
+        }
+        
+        urlSpan.textContent = displayUrl;
+        urlSpan.title = endpoint.url; // Show full URL on hover
         
         // Response status badge if available
         if (endpoint.response && endpoint.response.status) {
@@ -1103,6 +1126,7 @@ function renderSavedEndpoints() {
             listItem.appendChild(statusBadge);
         }
         
+        // Action buttons
         const actionsDiv = document.createElement('div');
         actionsDiv.className = 'saved-endpoint-actions';
         
@@ -1112,13 +1136,13 @@ function renderSavedEndpoints() {
         deleteBtn.title = 'Delete Endpoint';
         deleteBtn.addEventListener('click', (e) => {
             e.stopPropagation();
-            deleteEndpoint(index);
+            deleteEndpoint(index, endpoint);
         });
         
         actionsDiv.appendChild(deleteBtn);
         
-        listItem.appendChild(methodSpan);
-        listItem.appendChild(nameDiv);
+        // Add all elements to card
+        listItem.appendChild(itemHeader);
         listItem.appendChild(urlSpan);
         listItem.appendChild(actionsDiv);
         
@@ -1136,3 +1160,9 @@ function renderSavedEndpoints() {
 
 // Save Endpoint Button Click Handler
 saveEndpointBtn.addEventListener('click', saveEndpoint);
+
+// Header Saved Endpoints Button
+headerSavedSidebarBtn.addEventListener('click', () => {
+    savedEndpointsSidebar.classList.toggle('collapsed');
+    mainContainer.classList.toggle('with-saved-sidebar');
+});

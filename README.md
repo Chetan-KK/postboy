@@ -2,6 +2,10 @@
 
 A lightweight browser-based Postman clone with dark mode and support for making HTTP requests.
 
+## 🚀 Live Demo
+Check out the live version of the project here:  
+👉 [Postboy Live](https://chetan-kk.github.io/postboy/index.html)
+
 ## Features
 
 - **Modern Dark/Light Mode UI**: Toggle between dark and light themes with a single click.
