@@ -192,6 +192,23 @@
         <div class="saved-endpoints-header">
             <h3>Saved Endpoints</h3>
         </div>
+        
+        <!-- History Section -->
+        <div class="history-section">
+            <div class="history-header">
+                <h4>Request History</h4>
+                <button id="clear-history-btn" class="clear-history-btn" title="Clear all history">
+                    <i class="fas fa-trash"></i>
+                </button>
+            </div>
+            <div class="history-container">
+                <div class="no-history">No request history yet</div>
+                <ul id="history-list" class="history-list">
+                    <!-- History items will be dynamically added here -->
+                </ul>
+            </div>
+        </div>
+        
         <div class="saved-endpoints-container">
             <div class="no-saved-endpoints">No saved endpoints yet</div>
             <ul id="saved-endpoints-list" class="saved-endpoints-list">

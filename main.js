@@ -27,6 +27,11 @@ const savedEndpointsList = document.getElementById('saved-endpoints-list');
 const noSavedEndpointsMsg = document.querySelector('.no-saved-endpoints');
 const mainContainer = document.querySelector('main');
 
+// History Elements
+const historyList = document.getElementById('history-list');
+const clearHistoryBtn = document.getElementById('clear-history-btn');
+const noHistoryMsg = document.querySelector('.no-history');
+
 // Get current theme from localStorage
 const currentTheme = localStorage.getItem('postboyTheme') || 'dark-mode';
 
@@ -710,6 +715,15 @@ async function sendRequest() {
         
         // No more auto-save functionality
         
+        // Save to history
+        saveHistoryEntry({
+            method,
+            url,
+            status: response.status,
+            time: responseTime,
+            timestamp: Date.now()
+        });
+        
     } catch (error) {
         console.error('Request error:', error);
         statusCodeElem.textContent = 'Error';
@@ -800,6 +814,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Initialize saved endpoints sidebar
     initializeSidebarState();
     renderSavedEndpoints();
+    renderRequestHistory();
     
     // Add syntax highlighting to JSON input when focus is lost
     jsonBodyTextarea.addEventListener('blur', function() {
@@ -862,6 +877,9 @@ let savedEndpoints = JSON.parse(localStorage.getItem('postboySavedEndpoints')) |
 // Filter out any existing auto-saved entries
 savedEndpoints = savedEndpoints.filter(endpoint => !endpoint.autoSaved);
 localStorage.setItem('postboySavedEndpoints', JSON.stringify(savedEndpoints));
+
+// Request History Logic
+let requestHistory = JSON.parse(localStorage.getItem('postboyRequestHistory')) || [];
 
 // Save the current endpoint configuration
 function saveEndpoint() {
@@ -1166,3 +1184,143 @@ headerSavedSidebarBtn.addEventListener('click', () => {
     savedEndpointsSidebar.classList.toggle('collapsed');
     mainContainer.classList.toggle('with-saved-sidebar');
 });
+
+// Request History Functions
+function saveHistoryEntry(entry) {
+    // Add to beginning of array (most recent first)
+    requestHistory.unshift(entry);
+    
+    // Keep only last 50 entries
+    if (requestHistory.length > 50) {
+        requestHistory = requestHistory.slice(0, 50);
+    }
+    
+    // Save to localStorage
+    localStorage.setItem('postboyRequestHistory', JSON.stringify(requestHistory));
+    
+    // Update UI
+    renderRequestHistory();
+}
+
+function renderRequestHistory() {
+    historyList.innerHTML = '';
+    
+    if (requestHistory.length === 0) {
+        noHistoryMsg.style.display = 'block';
+        return;
+    }
+    
+    noHistoryMsg.style.display = 'none';
+    
+    requestHistory.forEach((entry, index) => {
+        const listItem = document.createElement('li');
+        listItem.className = 'history-item';
+        
+        // Method badge
+        const methodSpan = document.createElement('span');
+        methodSpan.className = `history-method ${entry.method.toLowerCase()}`;
+        methodSpan.textContent = entry.method;
+        
+        // URL display
+        const urlDiv = document.createElement('div');
+        urlDiv.className = 'history-url';
+        
+        let displayUrl = entry.url;
+        if (displayUrl.length > 35) {
+            const urlParts = displayUrl.split('//');
+            if (urlParts.length > 1) {
+                const domainPath = urlParts[1].split('/');
+                if (domainPath.length > 1) {
+                    displayUrl = urlParts[0] + '//' + domainPath[0] + '/...';
+                }
+            } else {
+                displayUrl = displayUrl.substring(0, 32) + '...';
+            }
+        }
+        
+        urlDiv.textContent = displayUrl;
+        urlDiv.title = entry.url;
+        
+        // Status badge
+        const statusSpan = document.createElement('span');
+        statusSpan.className = 'history-status';
+        statusSpan.textContent = entry.status;
+        
+        if (entry.status >= 200 && entry.status < 400) {
+            statusSpan.classList.add('success');
+        } else {
+            statusSpan.classList.add('error');
+        }
+        
+        // Time display
+        const timeSpan = document.createElement('span');
+        timeSpan.className = 'history-time';
+        timeSpan.textContent = `${entry.time}ms`;
+        
+        // Meta container
+        const metaDiv = document.createElement('div');
+        metaDiv.className = 'history-meta';
+        metaDiv.appendChild(statusSpan);
+        metaDiv.appendChild(timeSpan);
+        
+        // Delete button
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'history-delete-btn';
+        deleteBtn.innerHTML = '<i class="fas fa-times"></i>';
+        deleteBtn.title = 'Remove from history';
+        deleteBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            deleteHistoryItem(index);
+        });
+        
+        // Load on click
+        listItem.addEventListener('click', () => {
+            loadHistoryItem(entry);
+        });
+        
+        listItem.appendChild(methodSpan);
+        listItem.appendChild(urlDiv);
+        listItem.appendChild(metaDiv);
+        listItem.appendChild(deleteBtn);
+        
+        historyList.appendChild(listItem);
+    });
+}
+
+function loadHistoryItem(entry) {
+    // Set method and URL
+    requestMethodSelect.value = entry.method;
+    requestMethodSelect.dispatchEvent(new Event('change'));
+    urlInput.value = entry.url;
+    
+    // Clear other fields (params, headers, body, auth)
+    clearContainer(paramsContainer);
+    addKeyValuePair(paramsContainer);
+    
+    clearContainer(headersContainer);
+    addKeyValuePair(headersContainer);
+    
+    bodyTypeSelect.value = 'none';
+    bodyTypeSelect.dispatchEvent(new Event('change'));
+    
+    authTypeSelect.value = 'none';
+    authTypeSelect.dispatchEvent(new Event('change'));
+}
+
+function deleteHistoryItem(index) {
+    requestHistory.splice(index, 1);
+    localStorage.setItem('postboyRequestHistory', JSON.stringify(requestHistory));
+    renderRequestHistory();
+}
+
+function clearHistory() {
+    if (confirm('Are you sure you want to clear all request history?')) {
+        requestHistory = [];
+        localStorage.setItem('postboyRequestHistory', JSON.stringify(requestHistory));
+        renderRequestHistory();
+    }
+}
+
+// Clear History Button
+clearHistoryBtn.addEventListener('click', clearHistory);
+
