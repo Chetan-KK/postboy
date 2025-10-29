@@ -12,6 +12,9 @@ const saveEndpointBtn = document.getElementById('save-endpoint-btn');
 const authTypeSelect = document.getElementById('auth-type');
 const bearerTokenInput = document.getElementById('bearer-token');
 const bearerContainer = document.getElementById('bearer-container');
+const basicContainer = document.getElementById('basic-container');
+const basicUsernameInput = document.getElementById('basic-username');
+const basicPasswordInput = document.getElementById('basic-password');
 
 // Mobile Navigation Elements
 const mobileMenuBtn = document.querySelector('.mobile-menu-btn');
@@ -26,6 +29,15 @@ const headerSavedSidebarBtn = document.getElementById('header-saved-sidebar-btn'
 const savedEndpointsList = document.getElementById('saved-endpoints-list');
 const noSavedEndpointsMsg = document.querySelector('.no-saved-endpoints');
 const mainContainer = document.querySelector('main');
+const newCollectionBtn = document.getElementById('new-collection-btn');
+const manageCollectionsBtn = document.getElementById('manage-collections-btn');
+const exportBtn = document.getElementById('export-btn');
+const importFileInput = document.getElementById('import-file');
+const importBtn = document.getElementById('import-btn');
+const envSelect = document.getElementById('env-select');
+const manageEnvsBtn = document.getElementById('manage-envs-btn');
+const corsProxyUrlInput = document.getElementById('cors-proxy-url');
+const corsProxyToggle = document.getElementById('cors-proxy-toggle');
 
 // History Elements
 const historyList = document.getElementById('history-list');
@@ -117,7 +129,9 @@ themeToggleBtn.addEventListener('click', () => {
     const body = document.body;
     const mainIcon = themeToggleBtn.querySelector('i');
     const sidebarIcon = sidebarThemeToggleBtn ? sidebarThemeToggleBtn.querySelector('i') : null;
-    
+    // Respect reduced motion preference
+    const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
     if (body.classList.contains('dark-mode')) {
         body.classList.remove('dark-mode');
         body.classList.add('light-mode');
@@ -137,6 +151,9 @@ themeToggleBtn.addEventListener('click', () => {
         
         // Save theme preference to localStorage
         localStorage.setItem('postboyTheme', 'light-mode');
+        // update aria-pressed
+        themeToggleBtn.setAttribute('aria-pressed', 'true');
+        if (!prefersReduced) mainIcon.style.transform = 'rotate(360deg)';
     } else {
         body.classList.remove('light-mode');
         body.classList.add('dark-mode');
@@ -156,6 +173,9 @@ themeToggleBtn.addEventListener('click', () => {
         
         // Save theme preference to localStorage
         localStorage.setItem('postboyTheme', 'dark-mode');
+        // update aria-pressed
+        themeToggleBtn.setAttribute('aria-pressed', 'false');
+        if (!prefersReduced) mainIcon.style.transform = 'rotate(-360deg)';
     }
     
     // Re-highlight visible code blocks
@@ -164,6 +184,11 @@ themeToggleBtn.addEventListener('click', () => {
             hljs.highlightElement(block);
         }
     });
+
+    // reset transform after animation completes (if used)
+    setTimeout(() => {
+        if (mainIcon) mainIcon.style.transform = '';
+    }, 300);
 });
 
 // Tab Elements
@@ -201,6 +226,7 @@ const HTTP_METHODS = {
     GET: { hasBody: false, useParams: true },
     POST: { hasBody: true, useParams: false },
     PUT: { hasBody: true, useParams: false },
+    PATCH: { hasBody: true, useParams: false },
     DELETE: { hasBody: false, useParams: true },
     HEAD: { hasBody: false, useParams: true, bodylessResponse: true }
 };
@@ -218,6 +244,8 @@ const interactiveElements = [
     jsonBodyTextarea,
     authTypeSelect,
     bearerTokenInput,
+    basicUsernameInput,
+    basicPasswordInput,
     themeToggleBtn,
     ...document.querySelectorAll('.tab-btn'),
     ...document.querySelectorAll('.add-btn'),
@@ -537,8 +565,10 @@ authTypeSelect.addEventListener('change', () => {
     
     if (selectedType === 'none') {
         bearerContainer.classList.add('hidden');
+        basicContainer.classList.add('hidden');
     } else if (selectedType === 'bearer') {
         bearerContainer.classList.remove('hidden');
+        basicContainer.classList.add('hidden');
     }
 });
 
@@ -555,6 +585,8 @@ async function sendRequest() {
     try {
         const method = requestMethodSelect.value;
         let url = urlInput.value.trim();
+    // replace environment variables in URL
+    url = replaceEnvVars(url);
         
         // Validate URL
         if (!url) {
@@ -573,21 +605,51 @@ async function sendRequest() {
         
         // Get parameters
         const params = getKeyValuePairs(paramsContainer);
+        // replace env variables in params
+        const paramsReplaced = {};
+        for (const [k, v] of Object.entries(params)) {
+            const key = replaceEnvVars(k);
+            const val = replaceEnvVars(v);
+            if (key) paramsReplaced[key] = val;
+        }
         
         // Build URL with query parameters for methods that use URL params
         if (methodConfig.useParams) {
-            url = buildUrl(url, params);
+            url = buildUrl(url, paramsReplaced);
         }
         
         // Get headers
-        const headers = getKeyValuePairs(headersContainer);
+        let headers = getKeyValuePairs(headersContainer);
+        // replace env vars in headers
+        const headersReplaced = {};
+        for (const [k, v] of Object.entries(headers)) {
+            const key = replaceEnvVars(k);
+            const val = replaceEnvVars(v);
+            if (key) headersReplaced[key] = val;
+        }
+        headers = headersReplaced;
         
         // Add authentication headers if needed
         const authType = authTypeSelect.value;
         if (authType === 'bearer') {
             const token = bearerTokenInput.value.trim();
             if (token) {
-                headers['Authorization'] = `Bearer ${token}`;
+                headers['Authorization'] = `Bearer ${replaceEnvVars(token)}`;
+            }
+        } else if (authType === 'basic') {
+            const username = basicUsernameInput.value.trim();
+            const password = basicPasswordInput.value;
+            if (username || password) {
+                try {
+                    const encoded = btoa(`${replaceEnvVars(username)}:${replaceEnvVars(password)}`);
+                    headers['Authorization'] = `Basic ${encoded}`;
+                } catch (e) {
+                    // btoa may throw if non-latin1 characters are used; fall back to utf-8 handling
+                    const utf8ToBase64 = str => {
+                        return btoa(unescape(encodeURIComponent(str)));
+                    };
+                    headers['Authorization'] = `Basic ${utf8ToBase64(`${replaceEnvVars(username)}:${replaceEnvVars(password)}`)}`;
+                }
             }
         }
         
@@ -604,15 +666,28 @@ async function sendRequest() {
             if (bodyType === 'raw') {
                 const jsonBody = jsonBodyTextarea.value.trim();
                 if (jsonBody) {
-                    options.headers.set('Content-Type', 'application/json');
-                    options.body = jsonBody;
+                    // replace env vars in raw body
+                    const replacedBody = replaceEnvVars(jsonBody);
+                    // Validate JSON earlier and show friendly error if invalid
+                    try {
+                        JSON.parse(replacedBody);
+                        options.headers.set('Content-Type', 'application/json');
+                        options.body = replacedBody;
+                    } catch (err) {
+                        // Invalid JSON - surface friendly message and abort
+                        setLoading(false);
+                        statusCodeElem.textContent = 'Invalid JSON';
+                        statusCodeElem.classList.add('error');
+                        responseBodyElem.textContent = 'The request body contains invalid JSON. Please fix the JSON before sending.';
+                        return;
+                    }
                 }
             } else if (bodyType === 'form-data') {
                 const formData = new FormData();
                 const formPairs = getKeyValuePairs(bodyFormContainer);
                 
                 for (const [key, value] of Object.entries(formPairs)) {
-                    formData.append(key, value);
+                    formData.append(replaceEnvVars(key), replaceEnvVars(value));
                 }
                 
                 options.body = formData;
@@ -621,7 +696,7 @@ async function sendRequest() {
                 const urlEncodedData = new URLSearchParams();
                 
                 for (const [key, value] of Object.entries(formPairs)) {
-                    urlEncodedData.append(key, value);
+                    urlEncodedData.append(replaceEnvVars(key), replaceEnvVars(value));
                 }
                 
                 options.headers.set('Content-Type', 'application/x-www-form-urlencoded');
@@ -629,11 +704,38 @@ async function sendRequest() {
             }
         }
         
-        // Start timing
+    // apply CORS proxy if enabled
+    url = applyCorsProxy(url);
+
+    // Start timing
         const startTime = Date.now();
         
         // Send request
-        const response = await fetch(url, options);
+        let response;
+        try {
+            response = await fetch(url, options);
+        } catch (networkError) {
+            // Network failure (CORS, DNS, offline, etc.) - show friendly message
+            console.error('Network error when sending request:', networkError);
+            statusCodeElem.textContent = 'Network Error';
+            statusCodeElem.classList.add('error');
+            responseTimeElem.textContent = '';
+            responseHeadersElem.textContent = '';
+            responseBodyElem.textContent = 'Network error: ' + (networkError.message || 'Failed to send request. Check the URL or your network/CORS settings.');
+            // Save to history as failed
+            saveHistoryEntry({
+                method,
+                url,
+                params,
+                headers,
+                auth: { type: authType, token: authType === 'bearer' ? bearerTokenInput.value.trim() : '' },
+                body: options.body || null,
+                status: 'network_error',
+                timestamp: Date.now()
+            });
+            setLoading(false);
+            return;
+        }
         
         // Calculate response time
         const endTime = Date.now();
@@ -654,66 +756,70 @@ async function sendRequest() {
         const responseHeaders = formatHeaders(response.headers);
         applySyntaxHighlighting(responseHeadersElem, 'http', responseHeaders);
         
-        // Variables to store response info
         let responseBody = '';
         let responseType = 'text';
-        
+
         // Handle response body (special case for HEAD method which has no body)
         if (methodConfig.bodylessResponse) {
             responseBodyElem.textContent = "No response body for HEAD requests";
             responseBody = "No response body for HEAD requests";
+            if (responseRawElem) responseRawElem.textContent = responseBody;
+            if (responsePreviewFrame) responsePreviewFrame.srcdoc = '';
         } else {
-            // Get response body
             try {
-                const contentType = response.headers.get('content-type');
-                
-                if (contentType && contentType.includes('application/json')) {
-                    const jsonResponse = await response.json();
-                    responseBody = JSON.stringify(jsonResponse);
+                const contentType = (response.headers.get('content-type') || '').toLowerCase();
+                // read as text first (we'll parse JSON if needed)
+                const rawText = await response.text();
+                responseBody = rawText;
+
+                // Raw view
+                if (responseRawElem) responseRawElem.textContent = rawText;
+
+                // Pretty / syntax-highlighted view
+                if (contentType.includes('application/json')) {
                     responseType = 'json';
-                    const formattedJson = formatJSON(responseBody);
-                    applySyntaxHighlighting(responseBodyElem, 'json', formattedJson);
-                } else if (contentType && (
-                    contentType.includes('text/html') || 
-                    contentType.includes('application/xml') || 
-                    contentType.includes('text/xml')
-                )) {
-                    responseBody = await response.text();
-                    if (contentType.includes('html')) {
-                        responseType = 'html';
-                    } else {
-                        responseType = 'xml';
-                    }
-                    applySyntaxHighlighting(responseBodyElem, responseType, responseBody);
-                } else if (contentType && contentType.includes('text/css')) {
-                    responseBody = await response.text();
+                    applySyntaxHighlighting(responseBodyElem, 'json', formatJSON(rawText));
+                } else if (contentType.includes('text/html') || contentType.includes('application/xml') || contentType.includes('text/xml')) {
+                    if (contentType.includes('html')) responseType = 'html'; else responseType = 'xml';
+                    applySyntaxHighlighting(responseBodyElem, responseType, rawText);
+                    if (responsePreviewFrame) responsePreviewFrame.srcdoc = rawText;
+                } else if (contentType.includes('text/css')) {
                     responseType = 'css';
-                    applySyntaxHighlighting(responseBodyElem, 'css', responseBody);
-                } else if (contentType && contentType.includes('application/javascript')) {
-                    responseBody = await response.text();
+                    applySyntaxHighlighting(responseBodyElem, 'css', rawText);
+                } else if (contentType.includes('application/javascript') || contentType.includes('text/javascript')) {
                     responseType = 'javascript';
-                    applySyntaxHighlighting(responseBodyElem, 'javascript', responseBody);
+                    applySyntaxHighlighting(responseBodyElem, 'javascript', rawText);
                 } else {
-                    responseBody = await response.text();
-                    // Try to detect if it's JSON
+                    // Try to detect JSON
                     try {
-                        JSON.parse(responseBody);
+                        JSON.parse(rawText);
                         responseType = 'json';
-                        applySyntaxHighlighting(responseBodyElem, 'json', formatJSON(responseBody));
+                        applySyntaxHighlighting(responseBodyElem, 'json', formatJSON(rawText));
                     } catch (e) {
-                        // Not JSON, use plaintext
                         responseType = 'plaintext';
-                        applySyntaxHighlighting(responseBodyElem, 'plaintext', responseBody);
+                        applySyntaxHighlighting(responseBodyElem, 'plaintext', rawText);
                     }
                 }
             } catch (error) {
                 responseBody = 'Error parsing response body: ' + error.message;
                 responseType = 'error';
                 responseBodyElem.textContent = responseBody;
+                if (responseRawElem) responseRawElem.textContent = responseBody;
             }
         }
         
         // No more auto-save functionality
+        // Save successful request into history
+        saveHistoryEntry({
+            method,
+            url,
+            params,
+            headers,
+            auth: { type: authType, token: authType === 'bearer' ? bearerTokenInput.value.trim() : '' },
+            body: options.body || null,
+            status: response.status,
+            timestamp: Date.now()
+        });
         
         // Save to history
         saveHistoryEntry({
@@ -915,6 +1021,9 @@ function saveEndpoint() {
         };
     }
     
+    // Get optional collection/folder name
+    const collectionName = prompt('Enter a collection/folder name (optional)', '');
+
     // Create an endpoint object with all current configuration
     const endpoint = {
         name: endpointName,
@@ -932,6 +1041,7 @@ function saveEndpoint() {
             formData: bodyTypeSelect.value.includes('form') ? getKeyValuePairs(bodyFormContainer) : {}
         },
         response: responseData,
+        collection: collectionName ? collectionName.trim() : null,
         timestamp: Date.now()
     };
     
@@ -1083,98 +1193,261 @@ function renderSavedEndpoints() {
     
     noSavedEndpointsMsg.style.display = 'none';
     
-    // Sort by most recently saved/used
-    const sortedEndpoints = [...savedEndpoints].sort((a, b) => b.timestamp - a.timestamp);
-    
-    sortedEndpoints.forEach((endpoint, index) => {
-        const listItem = document.createElement('li');
-        listItem.className = 'saved-endpoint-item';
-        
-        // Create header with method and name
-        const itemHeader = document.createElement('div');
-        itemHeader.className = 'saved-endpoint-item-header';
-        
-        const methodSpan = document.createElement('span');
-        methodSpan.className = `saved-endpoint-method ${endpoint.method.toLowerCase()}`;
-        methodSpan.textContent = endpoint.method;
-        
-        const nameDiv = document.createElement('div');
-        nameDiv.className = 'saved-endpoint-name';
-        nameDiv.textContent = endpoint.name || endpoint.url;
-        nameDiv.title = endpoint.name || endpoint.url; // Add tooltip for long names
-        
-        itemHeader.appendChild(methodSpan);
-        itemHeader.appendChild(nameDiv);
-        
-        // URL display - truncate if too long
-        const urlSpan = document.createElement('span');
-        urlSpan.className = 'saved-endpoint-url';
-        
-        // Truncate URL if it's too long for display
-        let displayUrl = endpoint.url;
-        if (displayUrl.length > 40) {
-            // Keep the protocol and domain, then truncate the path
-            const urlParts = displayUrl.split('//');
-            if (urlParts.length > 1) {
-                const domainPath = urlParts[1].split('/');
-                if (domainPath.length > 1) {
-                    // Keep domain and beginning of path
-                    displayUrl = urlParts[0] + '//' + domainPath[0] + '/...';
+    // Group by collections/folders (collection may be null)
+    const grouped = {};
+    savedEndpoints.forEach(ep => {
+        const key = ep.collection || 'Uncategorized';
+        if (!grouped[key]) grouped[key] = [];
+        grouped[key].push(ep);
+    });
+
+    // For each collection render a heading and list
+    Object.keys(grouped).forEach(collectionName => {
+        const colHeader = document.createElement('div');
+        colHeader.className = 'collection-header';
+        colHeader.textContent = collectionName;
+
+        const colList = document.createElement('ul');
+        colList.className = 'collection-list';
+
+        // Sort by recent
+        const items = grouped[collectionName].sort((a, b) => b.timestamp - a.timestamp);
+
+        items.forEach((endpoint, index) => {
+            const listItem = document.createElement('li');
+            listItem.className = 'saved-endpoint-item';
+
+            const itemHeader = document.createElement('div');
+            itemHeader.className = 'saved-endpoint-item-header';
+
+            const methodSpan = document.createElement('span');
+            methodSpan.className = `saved-endpoint-method ${endpoint.method.toLowerCase()}`;
+            methodSpan.textContent = endpoint.method;
+
+            const nameDiv = document.createElement('div');
+            nameDiv.className = 'saved-endpoint-name';
+            nameDiv.textContent = endpoint.name || endpoint.url;
+            nameDiv.title = endpoint.name || endpoint.url;
+
+            itemHeader.appendChild(methodSpan);
+            itemHeader.appendChild(nameDiv);
+
+            const urlSpan = document.createElement('span');
+            urlSpan.className = 'saved-endpoint-url';
+            let displayUrl = endpoint.url;
+            if (displayUrl.length > 40) {
+                const urlParts = displayUrl.split('//');
+                if (urlParts.length > 1) {
+                    const domainPath = urlParts[1].split('/');
+                    if (domainPath.length > 1) {
+                        displayUrl = urlParts[0] + '//' + domainPath[0] + '/...';
+                    }
+                } else {
+                    displayUrl = displayUrl.substring(0, 37) + '...';
                 }
-            } else {
-                displayUrl = displayUrl.substring(0, 37) + '...';
             }
-        }
-        
-        urlSpan.textContent = displayUrl;
-        urlSpan.title = endpoint.url; // Show full URL on hover
-        
-        // Response status badge if available
-        if (endpoint.response && endpoint.response.status) {
-            const statusBadge = document.createElement('span');
-            statusBadge.className = 'saved-endpoint-status';
-            statusBadge.textContent = endpoint.response.status;
-            
-            if (endpoint.response.status >= 200 && endpoint.response.status < 400) {
-                statusBadge.classList.add('success');
-            } else {
-                statusBadge.classList.add('error');
+            urlSpan.textContent = displayUrl;
+            urlSpan.title = endpoint.url;
+
+            if (endpoint.response && endpoint.response.status) {
+                const statusBadge = document.createElement('span');
+                statusBadge.className = 'saved-endpoint-status';
+                statusBadge.textContent = endpoint.response.status;
+                if (endpoint.response.status >= 200 && endpoint.response.status < 400) {
+                    statusBadge.classList.add('success');
+                } else {
+                    statusBadge.classList.add('error');
+                }
+                listItem.appendChild(statusBadge);
             }
-            
-            listItem.appendChild(statusBadge);
-        }
-        
-        // Action buttons
-        const actionsDiv = document.createElement('div');
-        actionsDiv.className = 'saved-endpoint-actions';
-        
-        const deleteBtn = document.createElement('button');
-        deleteBtn.className = 'save-endpoint-action-btn delete-btn';
-        deleteBtn.innerHTML = '<i class="fas fa-trash"></i>';
-        deleteBtn.title = 'Delete Endpoint';
-        deleteBtn.addEventListener('click', (e) => {
-            e.stopPropagation();
-            deleteEndpoint(index, endpoint);
+
+            const actionsDiv = document.createElement('div');
+            actionsDiv.className = 'saved-endpoint-actions';
+
+            const deleteBtn = document.createElement('button');
+            deleteBtn.className = 'save-endpoint-action-btn delete-btn';
+            deleteBtn.innerHTML = '<i class="fas fa-trash"></i>';
+            deleteBtn.title = 'Delete Endpoint';
+            deleteBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                deleteEndpoint(index, endpoint);
+            });
+
+            actionsDiv.appendChild(deleteBtn);
+
+            listItem.appendChild(itemHeader);
+            listItem.appendChild(urlSpan);
+            listItem.appendChild(actionsDiv);
+
+            listItem.addEventListener('click', () => {
+                loadEndpoint(endpoint);
+                endpoint.timestamp = Date.now();
+                localStorage.setItem('postboySavedEndpoints', JSON.stringify(savedEndpoints));
+            });
+
+            colList.appendChild(listItem);
         });
-        
-        actionsDiv.appendChild(deleteBtn);
-        
-        // Add all elements to card
-        listItem.appendChild(itemHeader);
-        listItem.appendChild(urlSpan);
-        listItem.appendChild(actionsDiv);
-        
-        // Load endpoint when clicked
-        listItem.addEventListener('click', () => {
-            loadEndpoint(endpoint);
-            // Update the timestamp when used
-            endpoint.timestamp = Date.now();
-            localStorage.setItem('postboySavedEndpoints', JSON.stringify(savedEndpoints));
-        });
-        
-        savedEndpointsList.appendChild(listItem);
+
+        savedEndpointsList.appendChild(colHeader);
+        savedEndpointsList.appendChild(colList);
     });
 }
+
+// --- Environments ---
+let environments = JSON.parse(localStorage.getItem('postboyEnvironments')) || {};
+let currentEnvName = localStorage.getItem('postboyCurrentEnv') || null;
+
+function saveEnvironments() {
+    localStorage.setItem('postboyEnvironments', JSON.stringify(environments));
+}
+
+function renderEnvironmentOptions() {
+    if (!envSelect) return;
+    envSelect.innerHTML = '';
+    const defaultOpt = document.createElement('option');
+    defaultOpt.value = '';
+    defaultOpt.textContent = 'No Environment';
+    envSelect.appendChild(defaultOpt);
+
+    Object.keys(environments).forEach(name => {
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        if (name === currentEnvName) opt.selected = true;
+        envSelect.appendChild(opt);
+    });
+}
+
+function manageEnvironments() {
+    // simple prompt-based editor: list envs and allow create/edit/delete
+    const names = Object.keys(environments);
+    const action = prompt('Environments:\n' + (names.length ? names.join('\n') : '(none)') + '\n\nType:\n  new NAME - to create\n  edit NAME - to edit JSON\n  delete NAME - to delete\n\nOr Cancel');
+    if (!action) return;
+    const parts = action.split(' ');
+    const cmd = parts[0];
+    const name = parts.slice(1).join(' ').trim();
+    if (cmd === 'new' && name) {
+        if (environments[name]) { alert('Environment exists'); return; }
+        const raw = prompt('Enter variables as JSON, e.g. {"baseUrl":"https://api.example.com"}');
+        try { environments[name] = raw ? JSON.parse(raw) : {}; saveEnvironments(); renderEnvironmentOptions(); } catch (e) { alert('Invalid JSON'); }
+    } else if (cmd === 'edit' && name) {
+        if (!environments[name]) { alert('Not found'); return; }
+        const raw = prompt('Edit variables as JSON', JSON.stringify(environments[name], null, 2));
+        try { environments[name] = raw ? JSON.parse(raw) : {}; saveEnvironments(); renderEnvironmentOptions(); } catch (e) { alert('Invalid JSON'); }
+    } else if (cmd === 'delete' && name) {
+        if (!environments[name]) { alert('Not found'); return; }
+        if (!confirm('Delete environment ' + name + '?')) return;
+        delete environments[name]; saveEnvironments(); if (currentEnvName === name) { currentEnvName = null; localStorage.removeItem('postboyCurrentEnv'); } renderEnvironmentOptions();
+    } else {
+        alert('Unknown command');
+    }
+}
+
+// wire env select change
+if (envSelect) {
+    envSelect.addEventListener('change', () => {
+        currentEnvName = envSelect.value || null;
+        localStorage.setItem('postboyCurrentEnv', currentEnvName || '');
+    });
+}
+
+if (manageEnvsBtn) manageEnvsBtn.addEventListener('click', manageEnvironments);
+
+function replaceEnvVars(str) {
+    if (!str || !currentEnvName || !environments[currentEnvName]) return str;
+    return str.replace(/{{\s*([^}]+)\s*}}/g, (m, key) => {
+        return environments[currentEnvName][key] != null ? environments[currentEnvName][key] : m;
+    });
+}
+
+// --- Export / Import ---
+if (exportBtn) {
+    exportBtn.addEventListener('click', () => {
+        const payload = {
+            info: { name: 'Postboy Export', exportedAt: new Date().toISOString() },
+            savedEndpoints,
+            environments
+        };
+        const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'postboy-export-' + Date.now() + '.json';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(url);
+    });
+}
+
+if (importFileInput) {
+    importFileInput.addEventListener('change', (e) => {
+        const f = e.target.files[0];
+        if (!f) return;
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+            try {
+                const data = JSON.parse(ev.target.result);
+                const incoming = data.savedEndpoints || data.items || [];
+                const incomingEnvs = data.environments || data.env || data.environments || {};
+                if (incoming.length === 0 && Object.keys(incomingEnvs).length === 0) { alert('No endpoints or environments found'); return; }
+                if (!confirm('Import will merge into existing saved endpoints and environments. Continue?')) return;
+                // merge endpoints (keep timestamps)
+                incoming.forEach(ep => { ep.timestamp = ep.timestamp || Date.now(); savedEndpoints.push(ep); });
+                // merge envs
+                Object.keys(incomingEnvs).forEach(k => { environments[k] = incomingEnvs[k]; });
+                saveEnvironments();
+                localStorage.setItem('postboySavedEndpoints', JSON.stringify(savedEndpoints));
+                renderSavedEndpoints();
+                renderEnvironmentOptions();
+                alert('Import complete');
+            } catch (err) {
+                alert('Failed to import: ' + err.message);
+            }
+        };
+        reader.readAsText(f);
+    });
+}
+
+if (importBtn && importFileInput) {
+    importBtn.addEventListener('click', () => importFileInput.click());
+}
+
+// --- CORS Proxy handling ---
+function applyCorsProxy(url) {
+    try {
+        const enabled = corsProxyToggle ? corsProxyToggle.checked : false;
+        const proxy = corsProxyUrlInput ? corsProxyUrlInput.value.trim() : '';
+        if (enabled && proxy) {
+            // ensure proxy ends with '/'
+            const p = proxy.endsWith('/') ? proxy : proxy + '/';
+            return p + url;
+        }
+    } catch (e) {}
+    return url;
+}
+
+// --- Response view tabs ---
+const respViewBtns = document.querySelectorAll('.resp-view-btn');
+const responseRawElem = document.getElementById('response-raw');
+const responsePreviewFrame = document.getElementById('response-preview-frame');
+
+function setActiveResponseView(view) {
+    document.querySelectorAll('.resp-view-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.response-views pre, .response-views .response-preview').forEach(el => el.classList.add('hidden'));
+    const btn = document.querySelector(`.resp-view-btn[data-view="${view}"]`);
+    if (btn) btn.classList.add('active');
+    if (view === 'raw') document.querySelector('.response-raw').classList.remove('hidden');
+    else if (view === 'pretty') document.querySelector('.response-pretty').classList.remove('hidden');
+    else if (view === 'preview') document.querySelector('.response-preview').classList.remove('hidden');
+}
+
+document.addEventListener('click', (e) => {
+    const btn = e.target.closest('.resp-view-btn');
+    if (btn) {
+        setActiveResponseView(btn.getAttribute('data-view'));
+    }
+});
 
 // Save Endpoint Button Click Handler
 saveEndpointBtn.addEventListener('click', saveEndpoint);
@@ -1185,46 +1458,54 @@ headerSavedSidebarBtn.addEventListener('click', () => {
     mainContainer.classList.toggle('with-saved-sidebar');
 });
 
-// Request History Functions
+// ✅ Request History Functions
+
+let requestHistory = JSON.parse(localStorage.getItem('postboyRequestHistory')) || [];
+const historyList = document.getElementById('request-history-list') || document.getElementById('history-list');
+const clearHistoryBtn = document.getElementById('clear-history-btn');
+const noHistoryMsg = document.getElementById('no-history-msg');
+
+// ✅ Save new request to history
 function saveHistoryEntry(entry) {
-    // Add to beginning of array (most recent first)
+    // Add newest first
     requestHistory.unshift(entry);
-    
-    // Keep only last 50 entries
+
+    // Keep only last 50
     if (requestHistory.length > 50) {
         requestHistory = requestHistory.slice(0, 50);
     }
-    
+
     // Save to localStorage
     localStorage.setItem('postboyRequestHistory', JSON.stringify(requestHistory));
-    
+
     // Update UI
     renderRequestHistory();
 }
 
+// ✅ Render request history list
 function renderRequestHistory() {
+    if (!historyList) return;
     historyList.innerHTML = '';
-    
+
     if (requestHistory.length === 0) {
-        noHistoryMsg.style.display = 'block';
+        if (noHistoryMsg) noHistoryMsg.style.display = 'block';
         return;
     }
-    
-    noHistoryMsg.style.display = 'none';
-    
+
+    if (noHistoryMsg) noHistoryMsg.style.display = 'none';
+
     requestHistory.forEach((entry, index) => {
-        const listItem = document.createElement('li');
-        listItem.className = 'history-item';
-        
+        const li = document.createElement('li');
+        li.className = 'history-item';
+
         // Method badge
         const methodSpan = document.createElement('span');
         methodSpan.className = `history-method ${entry.method.toLowerCase()}`;
         methodSpan.textContent = entry.method;
-        
-        // URL display
+
+        // URL display (shortened if long)
         const urlDiv = document.createElement('div');
         urlDiv.className = 'history-url';
-        
         let displayUrl = entry.url;
         if (displayUrl.length > 35) {
             const urlParts = displayUrl.split('//');
@@ -1237,90 +1518,262 @@ function renderRequestHistory() {
                 displayUrl = displayUrl.substring(0, 32) + '...';
             }
         }
-        
         urlDiv.textContent = displayUrl;
         urlDiv.title = entry.url;
-        
+
         // Status badge
         const statusSpan = document.createElement('span');
         statusSpan.className = 'history-status';
-        statusSpan.textContent = entry.status;
-        
+        statusSpan.textContent = entry.status || '';
         if (entry.status >= 200 && entry.status < 400) {
             statusSpan.classList.add('success');
         } else {
             statusSpan.classList.add('error');
         }
-        
-        // Time display
+
+        // Time + timestamp
         const timeSpan = document.createElement('span');
         timeSpan.className = 'history-time';
-        timeSpan.textContent = `${entry.time}ms`;
-        
-        // Meta container
+        timeSpan.textContent = entry.time ? `${entry.time}ms` : '';
+
+        const timestamp = document.createElement('span');
+        timestamp.className = 'history-timestamp';
+        if (entry.timestamp) {
+            timestamp.textContent = new Date(entry.timestamp).toLocaleString();
+        }
+
         const metaDiv = document.createElement('div');
         metaDiv.className = 'history-meta';
         metaDiv.appendChild(statusSpan);
         metaDiv.appendChild(timeSpan);
-        
-        // Delete button
+        metaDiv.appendChild(timestamp);
+
+        // Actions
+        const actionsDiv = document.createElement('div');
+        actionsDiv.className = 'history-actions';
+
+        const loadBtn = document.createElement('button');
+        loadBtn.className = 'history-action-btn';
+        loadBtn.textContent = 'Load';
+        loadBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            loadHistoryItem(entry);
+        });
+
+        const saveBtn = document.createElement('button');
+        saveBtn.className = 'history-action-btn';
+        saveBtn.textContent = 'Save';
+        saveBtn.addEventListener('click', (e) => {
+            e.stopPropagation();
+            saveHistoryItemToCollection(entry);
+        });
+
         const deleteBtn = document.createElement('button');
-        deleteBtn.className = 'history-delete-btn';
-        deleteBtn.innerHTML = '<i class="fas fa-times"></i>';
-        deleteBtn.title = 'Remove from history';
+        deleteBtn.className = 'history-action-btn';
+        deleteBtn.textContent = 'Delete';
         deleteBtn.addEventListener('click', (e) => {
             e.stopPropagation();
             deleteHistoryItem(index);
         });
-        
-        // Load on click
-        listItem.addEventListener('click', () => {
-            loadHistoryItem(entry);
-        });
-        
-        listItem.appendChild(methodSpan);
-        listItem.appendChild(urlDiv);
-        listItem.appendChild(metaDiv);
-        listItem.appendChild(deleteBtn);
-        
-        historyList.appendChild(listItem);
+
+        actionsDiv.appendChild(loadBtn);
+        actionsDiv.appendChild(saveBtn);
+        actionsDiv.appendChild(deleteBtn);
+
+        // Assemble
+        li.appendChild(methodSpan);
+        li.appendChild(urlDiv);
+        li.appendChild(metaDiv);
+        li.appendChild(actionsDiv);
+
+        // Click anywhere to load
+        li.addEventListener('click', () => loadHistoryItem(entry));
+
+        historyList.appendChild(li);
     });
 }
 
+// ✅ Load a history entry back into request form
 function loadHistoryItem(entry) {
-    // Set method and URL
     requestMethodSelect.value = entry.method;
     requestMethodSelect.dispatchEvent(new Event('change'));
     urlInput.value = entry.url;
-    
-    // Clear other fields (params, headers, body, auth)
+
     clearContainer(paramsContainer);
     addKeyValuePair(paramsContainer);
-    
+
     clearContainer(headersContainer);
     addKeyValuePair(headersContainer);
-    
+
     bodyTypeSelect.value = 'none';
     bodyTypeSelect.dispatchEvent(new Event('change'));
-    
+
     authTypeSelect.value = 'none';
     authTypeSelect.dispatchEvent(new Event('change'));
 }
 
+// ✅ Delete one history entry
 function deleteHistoryItem(index) {
+    if (index < 0 || index >= requestHistory.length) return;
+    if (!confirm('Delete this history entry?')) return;
+
     requestHistory.splice(index, 1);
     localStorage.setItem('postboyRequestHistory', JSON.stringify(requestHistory));
     renderRequestHistory();
 }
 
+// ✅ Clear all history
 function clearHistory() {
     if (confirm('Are you sure you want to clear all request history?')) {
         requestHistory = [];
-        localStorage.setItem('postboyRequestHistory', JSON.stringify(requestHistory));
+        localStorage.removeItem('postboyRequestHistory');
         renderRequestHistory();
     }
 }
 
-// Clear History Button
-clearHistoryBtn.addEventListener('click', clearHistory);
+if (clearHistoryBtn) clearHistoryBtn.addEventListener('click', clearHistory);
+
+// ✅ Render on init
+renderRequestHistory();
+
+    requestHistory.splice(index, 1);
+    localStorage.setItem('postboyRequestHistory', JSON.stringify(requestHistory));
+    renderRequestHistory();
+}
+
+// ✅ Clear Request History
+function clearHistory() {
+    if (confirm('Are you sure you want to clear all request history?')) {
+        requestHistory = [];
+        localStorage.removeItem('postboyRequestHistory');
+        renderRequestHistory();
+    }
+}
+
+// ✅ Save History Item to Collection
+function saveHistoryItemToCollection(h) {
+    const defaultName = `${h.method} ${h.url}`;
+    const name = prompt('Name for saved endpoint', defaultName);
+    if (!name) return;
+    const collection = prompt('Collection name (optional)', '');
+
+    const endpoint = {
+        name,
+        method: h.method,
+        url: h.url,
+        params: h.params || {},
+        headers: h.headers || {},
+        auth: h.auth || { type: 'none', token: '' },
+        body: {
+            type: typeof h.body === 'string' ? 'raw' : 'none',
+            rawJson: typeof h.body === 'string' ? h.body : '',
+            formData: {}
+        },
+        response: null,
+        collection: collection ? collection.trim() : null,
+        timestamp: Date.now()
+    };
+
+    savedEndpoints.push(endpoint);
+    localStorage.setItem('postboySavedEndpoints', JSON.stringify(savedEndpoints));
+    renderSavedEndpoints();
+}
+
+// ✅ New Collection Button Handler
+if (newCollectionBtn) {
+    newCollectionBtn.addEventListener('click', () => {
+        const col = prompt('Enter new collection name');
+        if (!col) return;
+
+        // Create hidden placeholder endpoint to make collection visible
+        const placeholder = {
+            name: '(collection) ' + col,
+            method: 'GET',
+            url: '',
+            params: {},
+            headers: {},
+            auth: { type: 'none', token: '' },
+            body: { type: 'none', rawJson: '', formData: {} },
+            response: null,
+            collection: col.trim(),
+            timestamp: Date.now()
+        };
+        savedEndpoints.push(placeholder);
+        localStorage.setItem('postboySavedEndpoints', JSON.stringify(savedEndpoints));
+        renderSavedEndpoints();
+    });
+}
+
+// ✅ Manage Collections - Delete All in Collection
+if (manageCollectionsBtn) {
+    manageCollectionsBtn.addEventListener('click', () => {
+        const collections = Array.from(new Set(savedEndpoints.map(ep => ep.collection).filter(Boolean)));
+        if (collections.length === 0) {
+            alert('No collections available');
+            return;
+        }
+        const chosen = prompt('Collections:\n' + collections.join('\n') + '\n\nEnter a collection name to DELETE all endpoints inside it (or Cancel)');
+        if (!chosen) return;
+        if (!collections.includes(chosen)) {
+            alert('Collection not found');
+            return;
+        }
+        if (!confirm(`Delete all endpoints in collection "${chosen}"? This cannot be undone.`)) return;
+
+        savedEndpoints = savedEndpoints.filter(ep => ep.collection !== chosen);
+        localStorage.setItem('postboySavedEndpoints', JSON.stringify(savedEndpoints));
+        renderSavedEndpoints();
+    });
+}
+
+// ✅ Load History Item into Form
+function loadHistoryItem(h) {
+    requestMethodSelect.value = h.method;
+    requestMethodSelect.dispatchEvent(new Event('change'));
+    urlInput.value = h.url;
+
+    // Load Params
+    clearContainer(paramsContainer);
+    if (h.params && Object.keys(h.params).length > 0) {
+        for (const [k, v] of Object.entries(h.params)) {
+            const pair = addKeyValuePair(paramsContainer);
+            pair.querySelector('.key-input').value = k;
+            pair.querySelector('.value-input').value = v;
+        }
+    } else {
+        addKeyValuePair(paramsContainer);
+    }
+
+    // Load Headers
+    clearContainer(headersContainer);
+    if (h.headers && Object.keys(h.headers).length > 0) {
+        for (const [k, v] of Object.entries(h.headers)) {
+            const pair = addKeyValuePair(headersContainer);
+            pair.querySelector('.key-input').value = k;
+            pair.querySelector('.value-input').value = v;
+        }
+    } else {
+        addKeyValuePair(headersContainer);
+    }
+
+    // Load Auth
+    if (h.auth) {
+        authTypeSelect.value = h.auth.type || 'none';
+        authTypeSelect.dispatchEvent(new Event('change'));
+        if (h.auth.type === 'bearer') bearerTokenInput.value = h.auth.token || '';
+    }
+
+    // Load Body (Raw JSON if applicable)
+    if (h.body && typeof h.body === 'string') {
+        bodyTypeSelect.value = 'raw';
+        bodyTypeSelect.dispatchEvent(new Event('change'));
+        jsonBodyTextarea.value = h.body;
+    }
+}
+
+// ✅ Button Listeners
+if (clearHistoryBtn) clearHistoryBtn.addEventListener('click', clearHistory);
+
+// ✅ Render history on init
+renderRequestHistory();
 
