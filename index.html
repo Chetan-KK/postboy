@@ -36,6 +36,12 @@
                 <span>Saved</span>
             </button>
         </div>
+        <div class="header-history-btn">
+            <button id="header-history-sidebar-btn" title="Toggle Request History Sidebar">
+                <i class="fas fa-history"></i>
+                <span>History</span>
+            </button>
+        </div>
         <button class="mobile-menu-btn">
             <span class="bar"></span>
             <span class="bar"></span>
@@ -200,6 +206,22 @@
             <div class="no-saved-endpoints">No saved endpoints yet</div>
             <ul id="saved-endpoints-list" class="saved-endpoints-list">
                 <!-- Saved endpoints will be dynamically added here -->
+            </ul>
+        </div>
+    </div>
+
+    <!-- Request History Sidebar -->
+    <div class="history-sidebar collapsed">
+        <div class="history-header">
+            <h3>Request History</h3>
+            <button id="clear-history-btn" class="clear-history-btn" title="Clear All History">
+                <i class="fas fa-trash"></i>
+            </button>
+        </div>
+        <div class="history-container">
+            <div class="no-history">No request history yet</div>
+            <ul id="history-list" class="history-list">
+                <!-- History items will be dynamically added here -->
             </ul>
         </div>
     </div>
