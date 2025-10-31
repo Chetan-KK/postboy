@@ -772,6 +772,14 @@ async function sendRequest() {
 // Send Request Button Click Handler
 sendBtn.addEventListener('click', sendRequest);
 
+// Send Request on Enter Key Press (on URL input)
+urlInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') {
+        e.preventDefault(); // Prevent form submission if inside a form
+        sendRequest();
+    }
+});
+
 // Initialize - make sure one pair exists in each container
 if (paramsContainer.querySelectorAll('.key-value-pair').length === 0) {
     addKeyValuePair(paramsContainer);
