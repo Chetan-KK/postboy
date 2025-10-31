@@ -226,6 +226,44 @@ body.light-mode #header-saved-sidebar-btn i {
     color: var(--light-accent);
 }
 
+/* Header History Button Styles */
+.header-history-btn {
+    margin-right: 1.2rem;
+}
+
+#header-history-sidebar-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background-color: transparent;
+    color: var(--dark-text);
+    border: 1px solid var(--dark-border);
+    padding: 0.5rem;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+body.light-mode #header-history-sidebar-btn {
+    color: var(--light-text);
+    border: 1px solid var(--light-border);
+}
+
+#header-history-sidebar-btn:hover {
+    background-color: var(--dark-hover);
+}
+
+body.light-mode #header-history-sidebar-btn:hover {
+    background-color: var(--light-hover);
+}
+
+#header-history-sidebar-btn i {
+    color: var(--dark-accent);
+}
+
+body.light-mode #header-history-sidebar-btn i {
+    color: var(--light-accent);
+}
+
 /* Mobile Menu Button */
 .mobile-menu-btn {
     display: none;
@@ -1508,5 +1546,283 @@ main.with-saved-sidebar {
     
     main.with-saved-sidebar {
         margin-right: 0;
+    }
+    
+    .header-history-btn {
+        display: block;
+        margin-right: 0.8rem;
+    }
+    
+    #header-history-sidebar-btn {
+        padding: 0.5rem;
+        min-width: 36px;
+        justify-content: center;
+    }
+    
+    #header-history-sidebar-btn span {
+        display: none;
+    }
+}
+
+/* Request History Sidebar Styles */
+.history-sidebar {
+    position: fixed;
+    top: var(--header-height);
+    left: 0;
+    width: 320px;
+    height: calc(100vh - var(--header-height));
+    background-color: var(--dark-secondary-bg);
+    border-right: 1px solid var(--dark-border);
+    z-index: 95;
+    display: flex;
+    flex-direction: column;
+    transition: transform 0.3s ease;
+    transform: translateX(0);
+}
+
+body.light-mode .history-sidebar {
+    background-color: var(--light-secondary-bg);
+    border-right: 1px solid var(--light-border);
+}
+
+.history-sidebar.collapsed {
+    transform: translateX(-310px);
+}
+
+.history-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    border-bottom: 1px solid var(--dark-border);
+}
+
+body.light-mode .history-header {
+    border-bottom: 1px solid var(--light-border);
+}
+
+.history-header h3 {
+    font-size: 1.1rem;
+    color: var(--dark-text);
+}
+
+body.light-mode .history-header h3 {
+    color: var(--light-text);
+}
+
+.clear-history-btn {
+    background: transparent;
+    border: 1px solid var(--dark-border);
+    color: var(--dark-text);
+    padding: 0.4rem 0.6rem;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+body.light-mode .clear-history-btn {
+    border: 1px solid var(--light-border);
+    color: var(--light-text);
+}
+
+.clear-history-btn:hover {
+    background-color: #e74c3c;
+    color: white;
+    border-color: #e74c3c;
+}
+
+.history-container {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1rem;
+}
+
+.no-history {
+    color: var(--dark-text);
+    opacity: 0.7;
+    text-align: center;
+    padding: 1rem;
+}
+
+body.light-mode .no-history {
+    color: var(--light-text);
+}
+
+.history-list {
+    list-style: none;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.history-item {
+    background-color: var(--dark-bg);
+    border-radius: 8px;
+    padding: 0.875rem;
+    border: 1px solid var(--dark-border);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+body.light-mode .history-item {
+    background-color: var(--light-bg);
+    border: 1px solid var(--light-border);
+}
+
+.history-item:hover {
+    border-color: var(--dark-accent);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+}
+
+body.light-mode .history-item:hover {
+    border-color: var(--light-accent);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.history-item-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.25rem;
+}
+
+.history-method {
+    font-weight: bold;
+    font-size: 0.75rem;
+    padding: 0.2rem 0.4rem;
+    border-radius: 4px;
+    display: inline-block;
+    text-align: center;
+    min-width: 50px;
+    color: white;
+    background-color: #3498db;
+}
+
+.history-method.post {
+    background-color: #2ecc71;
+}
+
+.history-method.put {
+    background-color: #f39c12;
+}
+
+.history-method.delete {
+    background-color: #e74c3c;
+}
+
+.history-method.head {
+    background-color: #9b59b6;
+}
+
+.history-url {
+    font-size: 0.8rem;
+    word-break: break-all;
+    color: var(--dark-text);
+    padding-left: 2px;
+    line-height: 1.3;
+    margin-bottom: 0.3rem;
+}
+
+body.light-mode .history-url {
+    color: var(--light-text);
+}
+
+.history-meta {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.75rem;
+    color: #888;
+    padding-top: 0.3rem;
+    border-top: 1px solid var(--dark-border);
+}
+
+body.light-mode .history-meta {
+    border-top: 1px solid var(--light-border);
+}
+
+.history-timestamp {
+    display: flex;
+    align-items: center;
+    gap: 0.3rem;
+}
+
+.history-status {
+    font-weight: bold;
+    padding: 2px 6px;
+    border-radius: 10px;
+    background-color: #555;
+    color: white;
+}
+
+.history-status.success {
+    background-color: #2ecc71;
+}
+
+.history-status.error {
+    background-color: #e74c3c;
+}
+
+.history-delete-btn {
+    position: absolute;
+    top: 0.5rem;
+    right: 0.5rem;
+    background: transparent;
+    border: none;
+    color: var(--dark-text);
+    opacity: 0.5;
+    cursor: pointer;
+    padding: 0.2rem;
+    font-size: 0.8rem;
+    transition: all 0.2s ease;
+}
+
+body.light-mode .history-delete-btn {
+    color: var(--light-text);
+}
+
+.history-delete-btn:hover {
+    opacity: 1;
+    color: #e74c3c;
+}
+
+/* Adjust main content when history sidebar is open */
+main.with-history-sidebar {
+    margin-left: 320px;
+}
+
+/* Responsive styles for history sidebar */
+@media (max-width: 992px) {
+    .history-sidebar {
+        width: 280px;
+    }
+    
+    .history-sidebar.collapsed {
+        transform: translateX(-270px);
+    }
+    
+    main.with-history-sidebar {
+        margin-left: 280px;
+    }
+}
+
+@media (max-width: 768px) {
+    .history-sidebar {
+        width: 100%;
+        transform: translateX(0);
+        z-index: 106;
+    }
+    
+    .history-sidebar.collapsed {
+        transform: translateX(-100%);
+    }
+    
+    main.with-history-sidebar {
+        margin-left: 0;
     }
 }

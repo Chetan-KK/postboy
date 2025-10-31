@@ -9,11 +9,12 @@ Check out the live version of the project here:
 ## Features
 
 - **Modern Dark/Light Mode UI**: Toggle between dark and light themes with a single click.
-- **HTTP Request Methods**: Support for GET and POST requests.
+- **HTTP Request Methods**: Support for GET, POST, PUT, DELETE, and HEAD requests.
 - **Request Customization**:
   - Query Parameters
   - Headers
   - Body Support (Form Data, URL-encoded, Raw JSON)
+  - Bearer Token Authentication
 - **Response Display**:
   - Status Code
   - Response Headers
@@ -23,21 +24,35 @@ Check out the live version of the project here:
   - JSON formatting and syntax highlighting for request bodies
   - Automatic detection and highlighting for JSON, HTML, CSS, JavaScript, and XML responses
   - Color themes that match the UI dark/light mode
+- **Request History** (NEW!):
+  - Automatically saves all requests (up to 50 most recent)
+  - View request history with timestamps and status codes
+  - Quickly replay previous requests
+  - Delete individual history items or clear all history
+  - Persistent storage using localStorage
+- **Saved Endpoints**:
+  - Save frequently used endpoints with custom names
+  - Reload saved endpoints with all configurations
+  - Manage saved endpoints collection
 - **User Experience**:
   - Loading indicator during API requests
   - Auto-disable of UI elements while requests are processing
   - Responsive design for various screen sizes
+  - Mobile-friendly interface
 
 ## How to Use
 
-1. **Select Request Method**: Choose GET or POST from the dropdown.
+1. **Select Request Method**: Choose from GET, POST, PUT, DELETE, or HEAD from the dropdown.
 2. **Enter URL**: Input the API endpoint URL.
 3. **Configure Request**:
-   - Add query parameters (automatically appended to the URL for GET requests)
+   - Add query parameters (automatically appended to the URL)
    - Add headers as needed
-   - For POST requests, select body type and add data
+   - Configure authentication (Bearer Token)
+   - For POST/PUT requests, select body type and add data
 4. **Send Request**: Click the Send button to execute the request.
 5. **View Response**: See the response status, headers, and body in the response section with syntax highlighting.
+6. **Access History**: Click the History button to view your recent requests and quickly replay them.
+7. **Save Endpoints**: Click the bookmark icon to save endpoints for later use.
 
 ## JSON Editing
 
